@@ -1,17 +1,17 @@
-#if os(iOS) || os(macOS) || os(tvOS)
+#if os(iOS) || os(macOS) || os(tvOS) || os(visionOS)
   #if os(macOS)
     import Cocoa
   #endif
   import SceneKit
   import SpriteKit
-  #if os(iOS) || os(tvOS)
+  #if os(iOS) || os(tvOS) || os(visionOS)
     import UIKit
   #endif
   #if os(iOS) || os(macOS)
     import WebKit
   #endif
 
-  #if os(iOS) || os(tvOS)
+  #if os(iOS) || os(tvOS) || os(visionOS)
     public struct ViewImageConfig: Sendable {
       public enum Orientation {
         case landscape
@@ -819,7 +819,7 @@
               imageView.frame = view.frame
               #if os(macOS)
                 view.superview?.addSubview(imageView, positioned: .above, relativeTo: view)
-              #elseif os(iOS) || os(tvOS)
+              #elseif os(iOS) || os(tvOS) || os(visionOS)
                 view.superview?.insertSubview(imageView, aboveSubview: view)
               #endif
               callback(imageView)
@@ -850,7 +850,7 @@
           let cgImage = inWindow { skView.texture(from: skView.scene!)!.cgImage() }
           #if os(macOS)
             let image = Image(cgImage: cgImage, size: skView.bounds.size)
-          #elseif os(iOS) || os(tvOS)
+          #elseif os(iOS) || os(tvOS) || os(visionOS)
             let image = Image(cgImage: cgImage)
           #endif
           return Async(value: image)
@@ -903,7 +903,7 @@
       #endif
       return nil
     }
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       func asImage() -> Image {
         let renderer = UIGraphicsImageRenderer(bounds: bounds)
         return renderer.image { rendererContext in
@@ -913,7 +913,7 @@
     #endif
   }
 
-  #if os(iOS) || os(tvOS)
+  #if os(iOS) || os(tvOS) || os(visionOS)
     extension UIApplication {
       static var sharedIfAvailable: UIApplication? {
         let sharedSelector = NSSelectorFromString("sharedApplication")
@@ -1076,11 +1076,17 @@
 
     private func getKeyWindow() -> UIWindow? {
       var window: UIWindow?
-      if #available(iOS 13.0, *) {
+      #if os(visionOS)
         window = UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
-      } else {
-        window = UIApplication.sharedIfAvailable?.keyWindow
-      }
+      #else
+        if #available(iOS 13.0, *) {
+          window = UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
+        } else {
+          // 'keyWindow' is marked unavailable in visionOS, so this deprecated
+          // fallback can only be compiled on the other platforms.
+          window = UIApplication.sharedIfAvailable?.keyWindow
+        }
+      #endif
       return window
     }
 
