@@ -2,6 +2,10 @@
   import Foundation
   import SwiftUI
 
+  #if os(macOS)
+    import AppKit
+  #endif
+
   /// The size constraint for a snapshot (similar to `PreviewLayout`).
   public enum SwiftUISnapshotLayout {
     #if os(iOS) || os(tvOS)
@@ -94,6 +98,52 @@
             view: controller.view,
             viewController: controller
           )
+        }
+      }
+    }
+  #endif
+
+  #if os(macOS)
+    extension Snapshotting where Value: SwiftUI.View, Format == NSImage {
+
+      /// A snapshot strategy for comparing SwiftUI Views based on pixel equality.
+      public static var image: Snapshotting {
+        return .image()
+      }
+
+      /// A snapshot strategy for comparing SwiftUI Views based on pixel equality.
+      ///
+      /// > Note: Snapshots must be compared on the same OS as the device that originally took the
+      /// > reference to avoid discrepancies between images.
+      ///
+      /// - Parameters:
+      ///   - precision: The percentage of pixels that must match.
+      ///   - perceptualPrecision: The percentage a pixel must match the source pixel to be considered a
+      ///     match. 98-99% mimics
+      ///     [the precision](http://zschuessler.github.io/DeltaE/learn/#toc-defining-delta-e) of the
+      ///     human eye.
+      ///   - layout: A view layout override.
+      public static func image(
+        precision: Float = 1,
+        perceptualPrecision: Float = 1,
+        layout: SwiftUISnapshotLayout = .sizeThatFits
+      )
+        -> Snapshotting
+      {
+        let size: CGSize?
+        switch layout {
+        case .sizeThatFits:
+          size = nil
+        case let .fixed(width: width, height: height):
+          size = CGSize(width: width, height: height)
+        }
+
+        return Snapshotting<NSView, NSImage>.image(
+          precision: precision, perceptualPrecision: perceptualPrecision, size: size
+        ).pullback { view in
+          let hostingView = NSHostingView(rootView: view)
+          hostingView.frame.size = size ?? hostingView.fittingSize
+          return hostingView
         }
       }
     }
