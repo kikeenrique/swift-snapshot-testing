@@ -1325,6 +1325,30 @@ final class SnapshotTestingTests: BaseTestCase {
       assertSnapshot(of: view, as: .image(layout: .device(config: .tv)), named: "device")
     }
   #endif
+
+  #if os(visionOS)
+    func testSwiftUIView_visionOS() {
+      struct MyView: SwiftUI.View {
+        var body: some SwiftUI.View {
+          HStack {
+            Image(systemName: "checkmark.circle.fill")
+            Text("Checked").fixedSize()
+          }
+          .padding(5)
+          .background(RoundedRectangle(cornerRadius: 5.0).fill(Color.blue))
+          .padding(10)
+        }
+      }
+      let view = MyView().background(Color.yellow)
+
+      assertSnapshot(of: view, as: .image())
+      assertSnapshot(of: view, as: .image(layout: .sizeThatFits), named: "size-that-fits")
+      assertSnapshot(
+        of: view, as: .image(layout: .fixed(width: 300.0, height: 100.0)), named: "fixed")
+      assertSnapshot(
+        of: view, as: .image(layout: .device(config: .visionOSWindow)), named: "device")
+    }
+  #endif
 }
 
 #if os(iOS)

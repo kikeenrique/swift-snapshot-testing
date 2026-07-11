@@ -499,6 +499,16 @@
           size: .init(width: 3840, height: 2160),
           traits: .init()
         )
+      #elseif os(visionOS)
+        /// The default visionOS window size. Windows are freely resizable by the wearer, so this
+        /// is the system's initial size rather than a fixed device dimension: "By default, a
+        /// window measures 1280x720 pt."
+        /// https://developer.apple.com/design/human-interface-guidelines/windows#visionOS
+        public static let visionOSWindow = ViewImageConfig(
+          safeArea: .zero,
+          size: .init(width: 1280, height: 720),
+          traits: .init(displayScale: 2)
+        )
       #endif
     }
 
