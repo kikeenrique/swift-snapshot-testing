@@ -69,7 +69,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testAutolayout() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let vc = UIViewController()
       vc.view.translatesAutoresizingMaskIntoConstraints = false
       let subview = UIView()
@@ -81,7 +81,11 @@ final class SnapshotTestingTests: BaseTestCase {
         subview.leftAnchor.constraint(equalTo: vc.view.leftAnchor),
         subview.rightAnchor.constraint(equalTo: vc.view.rightAnchor),
       ])
-      assertSnapshot(of: vc, as: .image)
+      #if os(visionOS)
+        assertSnapshot(of: vc, as: .image, named: "visionos")
+      #else
+        assertSnapshot(of: vc, as: .image)
+      #endif
     #endif
   }
 
@@ -115,7 +119,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testCGPath() {
-    #if os(iOS) || os(tvOS) || os(macOS)
+    #if os(iOS) || os(tvOS) || os(macOS) || os(visionOS)
       let path = CGPath.heart
 
       let osName: String
@@ -125,6 +129,8 @@ final class SnapshotTestingTests: BaseTestCase {
         osName = "tvOS"
       #elseif os(macOS)
         osName = "macOS"
+      #elseif os(visionOS)
+        osName = "visionOS"
       #endif
 
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
@@ -228,13 +234,15 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testPrecision() {
-    #if os(iOS) || os(macOS) || os(tvOS)
-      #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(macOS) || os(tvOS) || os(visionOS)
+      #if os(iOS) || os(tvOS) || os(visionOS)
         let label = UILabel()
         #if os(iOS)
           label.frame = CGRect(origin: .zero, size: CGSize(width: 43.5, height: 20.5))
         #elseif os(tvOS)
           label.frame = CGRect(origin: .zero, size: CGSize(width: 98, height: 46))
+        #elseif os(visionOS)
+          label.frame = CGRect(origin: .zero, size: CGSize(width: 43.5, height: 20.5))
         #endif
         label.backgroundColor = .white
       #elseif os(macOS)
@@ -254,11 +262,11 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testImagePrecision() throws {
-    #if os(iOS) || os(tvOS) || os(macOS)
+    #if os(iOS) || os(tvOS) || os(macOS) || os(visionOS)
       let imageURL = URL(fileURLWithPath: String(#file), isDirectory: false)
         .deletingLastPathComponent()
         .appendingPathComponent("__Fixtures__/testImagePrecision.reference.png")
-      #if os(iOS) || os(tvOS)
+      #if os(iOS) || os(tvOS) || os(visionOS)
         let image = try XCTUnwrap(UIImage(contentsOfFile: imageURL.path))
       #elseif os(macOS)
         let image = try XCTUnwrap(NSImage(byReferencing: imageURL))
@@ -893,7 +901,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testTraitsWithView() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       if #available(iOS 11.0, *) {
         let label = UILabel()
         label.font = .preferredFont(forTextStyle: .title1)
@@ -901,10 +909,15 @@ final class SnapshotTestingTests: BaseTestCase {
         label.text = "What's the point?"
 
         allContentSizes.forEach { name, contentSize in
+          #if os(visionOS)
+            let fixtureName = "label-\(name)-visionos"
+          #else
+            let fixtureName = "label-\(name)"
+          #endif
           assertSnapshot(
             of: label,
             as: .image(traits: .init(preferredContentSizeCategory: contentSize)),
-            named: "label-\(name)"
+            named: fixtureName
           )
         }
       }
@@ -942,7 +955,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testUIBezierPath() {
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       let path = UIBezierPath.heart
 
       let osName: String
@@ -950,6 +963,8 @@ final class SnapshotTestingTests: BaseTestCase {
         osName = "iOS"
       #elseif os(tvOS)
         osName = "tvOS"
+      #elseif os(visionOS)
+        osName = "visionOS"
       #endif
 
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
@@ -963,10 +978,15 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testUIView() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let view = UIButton(type: .contactAdd)
-      assertSnapshot(of: view, as: .image)
-      assertSnapshot(of: view, as: .recursiveDescription)
+      #if os(visionOS)
+        assertSnapshot(of: view, as: .image, named: "visionos")
+        assertSnapshot(of: view, as: .recursiveDescription, named: "visionos")
+      #else
+        assertSnapshot(of: view, as: .image)
+        assertSnapshot(of: view, as: .recursiveDescription)
+      #endif
     #endif
   }
 
@@ -1050,30 +1070,38 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testCALayer() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let layer = CALayer()
       layer.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
       layer.backgroundColor = UIColor.red.cgColor
       layer.borderWidth = 4.0
       layer.borderColor = UIColor.black.cgColor
-      assertSnapshot(of: layer, as: .image)
+      #if os(visionOS)
+        assertSnapshot(of: layer, as: .image, named: "visionos")
+      #else
+        assertSnapshot(of: layer, as: .image)
+      #endif
     #endif
   }
 
   func testCALayerWithGradient() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let baseLayer = CALayer()
       baseLayer.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
       let gradientLayer = CAGradientLayer()
       gradientLayer.colors = [UIColor.red.cgColor, UIColor.yellow.cgColor]
       gradientLayer.frame = baseLayer.frame
       baseLayer.addSublayer(gradientLayer)
-      assertSnapshot(of: baseLayer, as: .image)
+      #if os(visionOS)
+        assertSnapshot(of: baseLayer, as: .image, named: "visionos")
+      #else
+        assertSnapshot(of: baseLayer, as: .image)
+      #endif
     #endif
   }
 
   func testViewControllerHierarchy() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let page = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal)
       page.setViewControllers([UIViewController()], direction: .forward, animated: false)
       let tab = UITabBarController()
@@ -1084,7 +1112,11 @@ final class SnapshotTestingTests: BaseTestCase {
         UINavigationController(rootViewController: UIViewController()),
         UINavigationController(rootViewController: UIViewController()),
       ]
-      assertSnapshot(of: tab, as: .hierarchy)
+      #if os(visionOS)
+        assertSnapshot(of: tab, as: .hierarchy, named: "visionos")
+      #else
+        assertSnapshot(of: tab, as: .hierarchy)
+      #endif
     #endif
   }
 
@@ -1139,7 +1171,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testWebView() throws {
-    #if os(iOS) || os(macOS)
+    #if os(iOS) || os(macOS) || os(visionOS)
       let fixtureUrl = URL(fileURLWithPath: String(#file), isDirectory: false)
         .deletingLastPathComponent()
         .appendingPathComponent("__Fixtures__/pointfree.html")
@@ -1187,7 +1219,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testEmbeddedWebView() throws {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let label = UILabel()
       label.text = "Hello, Blob!"
 
@@ -1212,7 +1244,7 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
-  #if os(iOS) || os(macOS)
+  #if os(iOS) || os(macOS) || os(visionOS)
     final class ManipulatingWKWebViewNavigationDelegate: NSObject, WKNavigationDelegate {
       func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         webView.evaluateJavaScript("document.body.children[0].classList.remove(\"hero\")")  // Change layout
@@ -1351,7 +1383,7 @@ final class SnapshotTestingTests: BaseTestCase {
   #endif
 }
 
-#if os(iOS)
+#if os(iOS) || os(visionOS)
   private let allContentSizes =
     [
       "extra-small": UIContentSizeCategory.extraSmall,
