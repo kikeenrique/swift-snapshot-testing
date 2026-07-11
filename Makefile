@@ -27,6 +27,12 @@ test-tvos:
 		-scheme SnapshotTesting \
 		-destination platform="tvOS Simulator,name=Apple TV 4K,OS=13.3"
 
+test-visionos:
+	set -o pipefail && \
+	xcodebuild test \
+		-scheme swift-snapshot-testing-Package \
+		-destination platform="visionOS Simulator,name=Apple Vision Pro"
+
 format:
 	swift format \
 		--ignore-unparsable-files \
@@ -34,4 +40,4 @@ format:
 		--recursive \
 		./Package.swift ./Sources ./Tests
 
-test-all: test-linux test-macos test-ios
+test-all: test-linux test-macos test-ios test-visionos
