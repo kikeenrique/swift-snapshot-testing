@@ -9,6 +9,9 @@ concurrency:
   group: format-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   swift_format:
     name: swift-format
@@ -21,7 +24,7 @@ jobs:
         run: brew install swift-format
       - name: Format
         run: make format
-      - uses: stefanzweifel/git-auto-commit-action@v6
+      - uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: Run swift-format
         env:
