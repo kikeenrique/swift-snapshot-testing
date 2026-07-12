@@ -336,7 +336,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testTableViewController() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       class TableViewController: UITableViewController {
         override func viewDidLoad() {
           super.viewDidLoad()
@@ -355,12 +355,17 @@ final class SnapshotTestingTests: BaseTestCase {
         }
       }
       let tableViewController = TableViewController()
-      assertSnapshot(of: tableViewController, as: .image(on: .iPhoneSe))
+      #if os(visionOS)
+        assertSnapshot(
+          of: tableViewController, as: .image(on: .visionOSWindow), named: "visionos")
+      #else
+        assertSnapshot(of: tableViewController, as: .image(on: .iPhoneSe))
+      #endif
     #endif
   }
 
   func testAssertMultipleSnapshot() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       class TableViewController: UITableViewController {
         override func viewDidLoad() {
           super.viewDidLoad()
@@ -379,16 +384,28 @@ final class SnapshotTestingTests: BaseTestCase {
         }
       }
       let tableViewController = TableViewController()
-      assertSnapshots(
-        of: tableViewController,
-        as: ["iPhoneSE-image": .image(on: .iPhoneSe), "iPad-image": .image(on: .iPadMini)])
-      assertSnapshots(
-        of: tableViewController, as: [.image(on: .iPhoneX), .image(on: .iPhoneXsMax)])
+      #if os(visionOS)
+        // visionOS has a single, resizable window rather than fixed device screens, so exercise
+        // the multi-snapshot API with the window preset and a fixed size instead of device
+        // configs. Unnamed (indexed) snapshots are skipped to avoid clobbering iOS fixtures.
+        assertSnapshots(
+          of: tableViewController,
+          as: [
+            "window-visionos": .image(on: .visionOSWindow),
+            "fixed-visionos": .image(size: .init(width: 640, height: 480)),
+          ])
+      #else
+        assertSnapshots(
+          of: tableViewController,
+          as: ["iPhoneSE-image": .image(on: .iPhoneSe), "iPad-image": .image(on: .iPadMini)])
+        assertSnapshots(
+          of: tableViewController, as: [.image(on: .iPhoneX), .image(on: .iPhoneXsMax)])
+      #endif
     #endif
   }
 
   func testTraits() {
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       if #available(iOS 11.0, tvOS 11.0, *) {
         class MyViewController: UIViewController {
           let topLabel = UILabel()
@@ -664,13 +681,30 @@ final class SnapshotTestingTests: BaseTestCase {
             of: viewController, as: .image(on: .tv), named: "tv")
           assertSnapshot(
             of: viewController, as: .image(on: .tv4K), named: "tv4k")
+        #elseif os(visionOS)
+          // visionOS has no fixed device screens or orientations, so exercise the single
+          // window preset instead of the iPhone/iPad matrix.
+          assertSnapshot(
+            of: viewController, as: .image(on: .visionOSWindow), named: "visionos-window")
+          assertSnapshot(
+            of: viewController, as: .recursiveDescription(on: .visionOSWindow),
+            named: "visionos-window")
+
+          allContentSizes.forEach { name, contentSize in
+            assertSnapshot(
+              of: viewController,
+              as: .image(
+                on: .visionOSWindow, traits: .init(preferredContentSizeCategory: contentSize)),
+              named: "visionos-window-\(name)"
+            )
+          }
         #endif
       }
     #endif
   }
 
   func testTraitsEmbeddedInTabNavigation() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       if #available(iOS 11.0, *) {
         class MyViewController: UIViewController {
           let topLabel = UILabel()
@@ -745,6 +779,12 @@ final class SnapshotTestingTests: BaseTestCase {
         let viewController = UITabBarController()
         viewController.setViewControllers([navController], animated: false)
 
+        #if os(visionOS)
+          // visionOS has no fixed device screens or orientations, so snapshot the tab/nav
+          // hierarchy in the single window preset instead of the iPhone/iPad matrix.
+          assertSnapshot(
+            of: viewController, as: .image(on: .visionOSWindow), named: "visionos-window")
+        #else
         assertSnapshot(of: viewController, as: .image(on: .iPhoneSe), named: "iphone-se")
         assertSnapshot(of: viewController, as: .image(on: .iPhone8), named: "iphone-8")
         assertSnapshot(of: viewController, as: .image(on: .iPhone8Plus), named: "iphone-8-plus")
@@ -807,12 +847,13 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: viewController, as: .image(on: .iPadPro12_9(.portrait)),
           named: "ipad-pro-12-9-alternative")
+        #endif
       }
     #endif
   }
 
   func testCollectionViewsWithMultipleScreenSizes() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
 
       final class CollectionViewController: UIViewController, UICollectionViewDataSource,
         UICollectionViewDelegateFlowLayout
@@ -889,14 +930,24 @@ final class SnapshotTestingTests: BaseTestCase {
 
       let viewController = CollectionViewController()
 
-      assertSnapshots(
-        of: viewController,
-        as: [
-          "ipad": .image(on: .iPadPro12_9),
-          "iphoneSe": .image(on: .iPhoneSe),
-          "iphone8": .image(on: .iPhone8),
-          "iphoneMax": .image(on: .iPhoneXsMax),
-        ])
+      #if os(visionOS)
+        // visionOS has a single window preset rather than multiple device screen sizes, so
+        // this only verifies the size-dependent collection layout at the default window size.
+        assertSnapshots(
+          of: viewController,
+          as: [
+            "visionOSWindow": .image(on: .visionOSWindow)
+          ])
+      #else
+        assertSnapshots(
+          of: viewController,
+          as: [
+            "ipad": .image(on: .iPadPro12_9),
+            "iphoneSe": .image(on: .iPhoneSe),
+            "iphone8": .image(on: .iPhone8),
+            "iphoneMax": .image(on: .iPhoneXsMax),
+          ])
+      #endif
     #endif
   }
 
@@ -925,7 +976,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testTraitsWithViewController() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let label = UILabel()
       label.font = .preferredFont(forTextStyle: .title1)
       label.adjustsFontForContentSizeCategory = true
@@ -944,12 +995,21 @@ final class SnapshotTestingTests: BaseTestCase {
       ])
 
       allContentSizes.forEach { name, contentSize in
-        assertSnapshot(
-          of: viewController,
-          as: .recursiveDescription(
-            on: .iPhoneSe, traits: .init(preferredContentSizeCategory: contentSize)),
-          named: "label-\(name)"
-        )
+        #if os(visionOS)
+          assertSnapshot(
+            of: viewController,
+            as: .recursiveDescription(
+              on: .visionOSWindow, traits: .init(preferredContentSizeCategory: contentSize)),
+            named: "label-\(name)-visionos"
+          )
+        #else
+          assertSnapshot(
+            of: viewController,
+            as: .recursiveDescription(
+              on: .iPhoneSe, traits: .init(preferredContentSizeCategory: contentSize)),
+            named: "label-\(name)"
+          )
+        #endif
       }
     #endif
   }
@@ -991,7 +1051,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testUIViewControllerLifeCycle() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       class ViewController: UIViewController {
         let viewDidLoadExpectation: XCTestExpectation
         let viewWillAppearExpectation: XCTestExpectation
@@ -1041,11 +1101,24 @@ final class SnapshotTestingTests: BaseTestCase {
       let viewWillAppearExpectation = expectation(description: "viewWillAppear")
       let viewDidAppearExpectation = expectation(description: "viewDidAppear")
       let viewWillDisappearExpectation = expectation(description: "viewWillDisappear")
-      let viewDidDisappearExpectation = expectation(description: "viewDidDisappear")
+      #if os(visionOS)
+        // Created directly (not via `expectation(description:)`) so the test is not failed for
+        // never waiting on it: viewDidDisappear is not delivered on visionOS (see below).
+        let viewDidDisappearExpectation = XCTestExpectation(description: "viewDidDisappear")
+      #else
+        let viewDidDisappearExpectation = expectation(description: "viewDidDisappear")
+      #endif
       viewWillAppearExpectation.expectedFulfillmentCount = 4
       viewDidAppearExpectation.expectedFulfillmentCount = 4
-      viewWillDisappearExpectation.expectedFulfillmentCount = 4
-      viewDidDisappearExpectation.expectedFulfillmentCount = 4
+      #if os(visionOS)
+        // The visionOS window teardown after each snapshot delivers viewWillDisappear once per
+        // snapshot (instead of twice on iOS) and never completes the disappearance transition,
+        // so viewDidDisappear is not delivered at all.
+        viewWillDisappearExpectation.expectedFulfillmentCount = 2
+      #else
+        viewWillDisappearExpectation.expectedFulfillmentCount = 4
+        viewDidDisappearExpectation.expectedFulfillmentCount = 4
+      #endif
 
       let viewController = ViewController(
         viewDidLoadExpectation: viewDidLoadExpectation,
@@ -1055,17 +1128,32 @@ final class SnapshotTestingTests: BaseTestCase {
         viewDidDisappearExpectation: viewDidDisappearExpectation
       )
 
-      assertSnapshot(of: viewController, as: .image)
-      assertSnapshot(of: viewController, as: .image)
+      #if os(visionOS)
+        assertSnapshot(of: viewController, as: .image, named: "visionos-1")
+        assertSnapshot(of: viewController, as: .image, named: "visionos-2")
+      #else
+        assertSnapshot(of: viewController, as: .image)
+        assertSnapshot(of: viewController, as: .image)
+      #endif
 
-      wait(
-        for: [
-          viewDidLoadExpectation,
-          viewWillAppearExpectation,
-          viewDidAppearExpectation,
-          viewWillDisappearExpectation,
-          viewDidDisappearExpectation,
-        ], timeout: 1.0, enforceOrder: true)
+      #if os(visionOS)
+        wait(
+          for: [
+            viewDidLoadExpectation,
+            viewWillAppearExpectation,
+            viewDidAppearExpectation,
+            viewWillDisappearExpectation,
+          ], timeout: 1.0, enforceOrder: true)
+      #else
+        wait(
+          for: [
+            viewDidLoadExpectation,
+            viewWillAppearExpectation,
+            viewDidAppearExpectation,
+            viewWillDisappearExpectation,
+            viewDidDisappearExpectation,
+          ], timeout: 1.0, enforceOrder: true)
+      #endif
     #endif
   }
 
@@ -1189,6 +1277,9 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testViewWithZeroHeightOrWidth() {
+    // This test stays excluded on visionOS: snapshotting a zero-sized view there produces a
+    // zero-sized image, so the size comparison against the recorded "empty image" placeholder
+    // reference fails (and re-records) on every run, making the test unable to ever pass.
     #if os(iOS) || os(tvOS)
       var rect = CGRect(x: 0, y: 0, width: 350, height: 0)
       var view = UIView(frame: rect)
@@ -1208,6 +1299,9 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testViewAgainstEmptyImage() {
+    // This test stays excluded on visionOS: zero-sized views render as the library's
+    // error-placeholder image there, so the reference would just be that placeholder and the
+    // test could not exercise its intent of comparing a real render against an empty image.
     #if os(iOS) || os(tvOS)
       let rect = CGRect(x: 0, y: 0, width: 0, height: 0)
       let view = UIView(frame: rect)
