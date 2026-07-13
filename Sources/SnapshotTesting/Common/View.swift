@@ -504,11 +504,22 @@
         /// is the system's initial size rather than a fixed device dimension: "By default, a
         /// window measures 1280x720 pt."
         /// https://developer.apple.com/design/human-interface-guidelines/windows#visionOS
-        public static let visionOSWindow = ViewImageConfig(
-          safeArea: .zero,
-          size: .init(width: 1280, height: 720),
-          traits: .init(displayScale: 2)
-        )
+        public static let visionOSWindow = ViewImageConfig.visionOSWindow(
+          width: 1280, height: 720)
+
+        /// A visionOS window at an arbitrary size. visionOS publishes no fixed window bounds:
+        /// the HIG asks each app to choose its own minimum and maximum ("Choose a minimum and
+        /// maximum size for each window to help keep your content looking great."), so any
+        /// point size can be a valid window geometry.
+        /// https://developer.apple.com/design/human-interface-guidelines/windows#visionOS
+        /// https://developer.apple.com/documentation/visionOS/positioning-and-sizing-windows
+        public static func visionOSWindow(width: CGFloat, height: CGFloat) -> ViewImageConfig {
+          return .init(
+            safeArea: .zero,
+            size: .init(width: width, height: height),
+            traits: .init(displayScale: 2)
+          )
+        }
       #endif
     }
 

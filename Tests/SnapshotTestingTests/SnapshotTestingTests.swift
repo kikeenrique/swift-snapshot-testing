@@ -356,6 +356,9 @@ final class SnapshotTestingTests: BaseTestCase {
       }
       let tableViewController = TableViewController()
       #if os(visionOS)
+        // A single geometry suffices here: at narrower window widths the render is the same
+        // full-width rows at a smaller width (verified empirically at 480 pt), so extra
+        // window-size variants would add fixtures without adding coverage.
         assertSnapshot(
           of: tableViewController, as: .image(on: .visionOSWindow), named: "visionos")
       #else
@@ -387,7 +390,9 @@ final class SnapshotTestingTests: BaseTestCase {
       #if os(visionOS)
         // visionOS has a single, resizable window rather than fixed device screens, so exercise
         // the multi-snapshot API with the window preset and a fixed size instead of device
-        // configs. Unnamed (indexed) snapshots are skipped to avoid clobbering iOS fixtures.
+        // configs. The unnamed (indexed) variant cannot run here: unnamed references are
+        // written as `<test>.1.png`/`<test>.2.png` with no way to inject a platform suffix,
+        // so running it on visionOS would clobber the iOS fixtures of the same name.
         assertSnapshots(
           of: tableViewController,
           as: [
@@ -682,10 +687,21 @@ final class SnapshotTestingTests: BaseTestCase {
           assertSnapshot(
             of: viewController, as: .image(on: .tv4K), named: "tv4k")
         #elseif os(visionOS)
-          // visionOS has no fixed device screens or orientations, so exercise the single
-          // window preset instead of the iPhone/iPad matrix.
+          // visionOS has no fixed device screens or orientations, so exercise the default
+          // window preset plus one narrow geometry instead of the iPhone/iPad matrix.
+          //
+          // Note on size classes: measured empirically on the visionOS 2.5 simulator, the
+          // offscreen snapshot window resolves horizontal and vertical size classes as
+          // `.unspecified` at every window width (320-1920 pt) — unlike iOS device presets,
+          // whose size classes come from explicit config traits, the visionOS window config
+          // sets none and the offscreen window derives none from its geometry. A narrow
+          // window therefore exercises layout at a different aspect ratio, not a size-class
+          // change.
           assertSnapshot(
             of: viewController, as: .image(on: .visionOSWindow), named: "visionos-window")
+          assertSnapshot(
+            of: viewController, as: .image(on: .visionOSWindow(width: 640, height: 720)),
+            named: "visionos-window-640x720")
           assertSnapshot(
             of: viewController, as: .recursiveDescription(on: .visionOSWindow),
             named: "visionos-window")
@@ -931,12 +947,16 @@ final class SnapshotTestingTests: BaseTestCase {
       let viewController = CollectionViewController()
 
       #if os(visionOS)
-        // visionOS has a single window preset rather than multiple device screen sizes, so
-        // this only verifies the size-dependent collection layout at the default window size.
+        // visionOS has freely resizable windows rather than multiple device screen sizes, so
+        // the size-dependent collection layout is exercised across representative window
+        // geometries: narrow (half the default width), the HIG default (1280x720 pt), and a
+        // large 16:9 window.
         assertSnapshots(
           of: viewController,
           as: [
-            "visionOSWindow": .image(on: .visionOSWindow)
+            "visionos-window-640x720": .image(on: .visionOSWindow(width: 640, height: 720)),
+            "visionos-window-1280x720": .image(on: .visionOSWindow),
+            "visionos-window-1920x1080": .image(on: .visionOSWindow(width: 1920, height: 1080)),
           ])
       #else
         assertSnapshots(
