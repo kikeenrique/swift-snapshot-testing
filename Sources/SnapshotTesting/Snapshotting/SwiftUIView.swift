@@ -123,10 +123,13 @@
       ///     [the precision](http://zschuessler.github.io/DeltaE/learn/#toc-defining-delta-e) of the
       ///     human eye.
       ///   - layout: A view layout override.
+      ///   - appearance: An appearance override (e.g. `NSAppearance(named: .darkAqua)`); `nil` uses
+      ///     the inherited appearance.
       public static func image(
         precision: Float = 1,
         perceptualPrecision: Float = 1,
-        layout: SwiftUISnapshotLayout = .sizeThatFits
+        layout: SwiftUISnapshotLayout = .sizeThatFits,
+        appearance: NSAppearance? = nil
       )
         -> Snapshotting
       {
@@ -142,6 +145,7 @@
           precision: precision, perceptualPrecision: perceptualPrecision, size: size
         ).pullback { view in
           let hostingView = NSHostingView(rootView: view)
+          hostingView.appearance = appearance
           hostingView.frame.size = size ?? hostingView.fittingSize
           return hostingView
         }
