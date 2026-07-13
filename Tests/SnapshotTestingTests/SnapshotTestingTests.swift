@@ -227,6 +227,22 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
+  func testNSViewController() {
+    #if os(macOS)
+      let viewController = NSViewController()
+      let view = NSView()
+      view.frame = CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0)
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.orange.cgColor
+      view.layer?.cornerRadius = 10
+      viewController.view = view
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        assertSnapshot(of: viewController, as: .image)
+        assertSnapshot(of: viewController, as: .recursiveDescription)
+      }
+    #endif
+  }
+
   func testPrecision() {
     #if os(iOS) || os(macOS) || os(tvOS)
       #if os(iOS) || os(tvOS)
@@ -1050,25 +1066,43 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testCALayer() {
-    #if os(iOS)
+    #if os(iOS) || os(macOS)
       let layer = CALayer()
       layer.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
-      layer.backgroundColor = UIColor.red.cgColor
       layer.borderWidth = 4.0
-      layer.borderColor = UIColor.black.cgColor
-      assertSnapshot(of: layer, as: .image)
+      #if os(iOS)
+        layer.backgroundColor = UIColor.red.cgColor
+        layer.borderColor = UIColor.black.cgColor
+        assertSnapshot(of: layer, as: .image)
+      #elseif os(macOS)
+        layer.backgroundColor = NSColor.red.cgColor
+        layer.borderColor = NSColor.black.cgColor
+        if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+          assertSnapshot(of: layer, as: .image, named: "macos")
+        }
+      #endif
     #endif
   }
 
   func testCALayerWithGradient() {
-    #if os(iOS)
+    #if os(iOS) || os(macOS)
       let baseLayer = CALayer()
       baseLayer.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
       let gradientLayer = CAGradientLayer()
-      gradientLayer.colors = [UIColor.red.cgColor, UIColor.yellow.cgColor]
+      #if os(iOS)
+        gradientLayer.colors = [UIColor.red.cgColor, UIColor.yellow.cgColor]
+      #elseif os(macOS)
+        gradientLayer.colors = [NSColor.red.cgColor, NSColor.yellow.cgColor]
+      #endif
       gradientLayer.frame = baseLayer.frame
       baseLayer.addSublayer(gradientLayer)
-      assertSnapshot(of: baseLayer, as: .image)
+      #if os(iOS)
+        assertSnapshot(of: baseLayer, as: .image)
+      #elseif os(macOS)
+        if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+          assertSnapshot(of: baseLayer, as: .image, named: "macos")
+        }
+      #endif
     #endif
   }
 
@@ -1346,6 +1380,15 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(of: view, as: .image(layout: .sizeThatFits), named: "size-that-fits")
         assertSnapshot(
           of: view, as: .image(layout: .fixed(width: 300.0, height: 100.0)), named: "fixed")
+
+        // System colors resolve against the effective appearance, so the two renders must differ.
+        if #available(macOS 12.0, *) {
+          let appearanceView = MyView().background(Color(nsColor: .windowBackgroundColor))
+          assertSnapshot(
+            of: appearanceView, as: .image(appearance: NSAppearance(named: .aqua)), named: "light")
+          assertSnapshot(
+            of: appearanceView, as: .image(appearance: NSAppearance(named: .darkAqua)), named: "dark")
+        }
       }
     }
   #endif
