@@ -1455,7 +1455,8 @@ final class SnapshotTestingTests: BaseTestCase {
           assertSnapshot(
             of: appearanceView, as: .image(appearance: NSAppearance(named: .aqua)), named: "light")
           assertSnapshot(
-            of: appearanceView, as: .image(appearance: NSAppearance(named: .darkAqua)), named: "dark")
+            of: appearanceView, as: .image(appearance: NSAppearance(named: .darkAqua)),
+            named: "dark")
         }
       }
     }
