@@ -17,11 +17,15 @@
     ///     [the precision](http://zschuessler.github.io/DeltaE/learn/#toc-defining-delta-e) of the
     ///     human eye.
     ///   - size: A view size override.
+    ///   - appearance: An appearance override (e.g. `NSAppearance(named: .darkAqua)`); `nil` uses
+    ///     the inherited appearance.
     public static func image(
-      precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil
+      precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil,
+      appearance: NSAppearance? = nil
     ) -> Snapshotting {
       return Snapshotting<NSView, NSImage>.image(
-        precision: precision, perceptualPrecision: perceptualPrecision, size: size
+        precision: precision, perceptualPrecision: perceptualPrecision, size: size,
+        appearance: appearance
       ).pullback { $0.view }
     }
   }

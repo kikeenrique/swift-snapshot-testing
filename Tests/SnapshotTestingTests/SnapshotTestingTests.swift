@@ -223,6 +223,8 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(of: view, as: .image)
         assertSnapshot(of: view, as: .recursiveDescription)
+        assertSnapshot(
+          of: view, as: .image(size: CGSize(width: 30.0, height: 10.0)), named: "size-override")
       }
     #endif
   }
@@ -239,6 +241,36 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(of: viewController, as: .image)
         assertSnapshot(of: viewController, as: .recursiveDescription)
+        assertSnapshot(
+          of: viewController, as: .image(size: CGSize(width: 40.0, height: 10.0)),
+          named: "size-override")
+      }
+    #endif
+  }
+
+  func testNSViewAppearance() {
+    #if os(macOS)
+      // Draws with a dynamic system color, which resolves against the effective appearance at
+      // draw time — so the light and dark renders must differ.
+      final class AppearanceView: NSView {
+        override func draw(_ dirtyRect: NSRect) {
+          NSColor.windowBackgroundColor.setFill()
+          bounds.fill()
+        }
+      }
+      let view = AppearanceView(frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        assertSnapshot(
+          of: view, as: .image(appearance: NSAppearance(named: .aqua)), named: "light")
+        assertSnapshot(
+          of: view, as: .image(appearance: NSAppearance(named: .darkAqua)), named: "dark")
+
+        let viewController = NSViewController()
+        viewController.view = AppearanceView(
+          frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
+        assertSnapshot(
+          of: viewController, as: .image(appearance: NSAppearance(named: .darkAqua)),
+          named: "view-controller-dark")
       }
     #endif
   }

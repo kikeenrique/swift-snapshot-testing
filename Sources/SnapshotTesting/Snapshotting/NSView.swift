@@ -20,14 +20,18 @@
     ///     [the precision](http://zschuessler.github.io/DeltaE/learn/#toc-defining-delta-e) of the
     ///     human eye.
     ///   - size: A view size override.
+    ///   - appearance: An appearance override (e.g. `NSAppearance(named: .darkAqua)`); `nil` uses
+    ///     the inherited appearance.
     public static func image(
-      precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil
+      precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil,
+      appearance: NSAppearance? = nil
     ) -> Snapshotting {
       return SimplySnapshotting.image(
         precision: precision, perceptualPrecision: perceptualPrecision
       ).asyncPullback { view in
         let initialSize = view.frame.size
         if let size = size { view.frame.size = size }
+        if let appearance = appearance { view.appearance = appearance }
         guard view.frame.width > 0, view.frame.height > 0 else {
           fatalError("View not renderable to image at size \(view.frame.size)")
         }
