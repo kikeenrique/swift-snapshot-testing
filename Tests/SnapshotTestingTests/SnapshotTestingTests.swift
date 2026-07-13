@@ -275,6 +275,42 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
+  func testNSViewScale() {
+    #if os(macOS)
+      let view = NSView()
+      view.frame = CGRect(x: 0.0, y: 0.0, width: 10.0, height: 10.0)
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.blue.cgColor
+      view.layer?.cornerRadius = 5
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        // Pinned scales render machine-independently: 10 pt becomes 10 px at 1x, 20 px at 2x,
+        // regardless of the host display's backing scale.
+        assertSnapshot(of: view, as: .image(scale: 1), named: "1x")
+        assertSnapshot(of: view, as: .image(scale: 2), named: "2x")
+      }
+    #endif
+  }
+
+  func testNSHostingController() {
+    #if os(macOS)
+      struct MyView: SwiftUI.View {
+        var body: some SwiftUI.View {
+          HStack {
+            Image(systemName: "checkmark.circle.fill")
+            Text("Checked").fixedSize()
+          }
+          .padding(5)
+          .background(RoundedRectangle(cornerRadius: 5.0).fill(Color.blue))
+          .padding(10)
+        }
+      }
+      let controller = NSHostingController(rootView: MyView().background(Color.yellow))
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        assertSnapshot(of: controller, as: .image(size: CGSize(width: 200.0, height: 100.0)))
+      }
+    #endif
+  }
+
   func testPrecision() {
     #if os(iOS) || os(macOS) || os(tvOS)
       #if os(iOS) || os(tvOS)
