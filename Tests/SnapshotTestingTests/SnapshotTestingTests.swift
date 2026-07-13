@@ -229,6 +229,90 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(of: view, as: .image)
         assertSnapshot(of: view, as: .recursiveDescription)
+        assertSnapshot(
+          of: view, as: .image(size: CGSize(width: 30.0, height: 10.0)), named: "size-override")
+      }
+    #endif
+  }
+
+  func testNSViewController() {
+    #if os(macOS)
+      let viewController = NSViewController()
+      let view = NSView()
+      view.frame = CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0)
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.orange.cgColor
+      view.layer?.cornerRadius = 10
+      viewController.view = view
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        assertSnapshot(of: viewController, as: .image)
+        assertSnapshot(of: viewController, as: .recursiveDescription)
+        assertSnapshot(
+          of: viewController, as: .image(size: CGSize(width: 40.0, height: 10.0)),
+          named: "size-override")
+      }
+    #endif
+  }
+
+  func testNSViewAppearance() {
+    #if os(macOS)
+      // Draws with a dynamic system color, which resolves against the effective appearance at
+      // draw time — so the light and dark renders must differ.
+      final class AppearanceView: NSView {
+        override func draw(_ dirtyRect: NSRect) {
+          NSColor.windowBackgroundColor.setFill()
+          bounds.fill()
+        }
+      }
+      let view = AppearanceView(frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        assertSnapshot(
+          of: view, as: .image(appearance: NSAppearance(named: .aqua)), named: "light")
+        assertSnapshot(
+          of: view, as: .image(appearance: NSAppearance(named: .darkAqua)), named: "dark")
+
+        let viewController = NSViewController()
+        viewController.view = AppearanceView(
+          frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
+        assertSnapshot(
+          of: viewController, as: .image(appearance: NSAppearance(named: .darkAqua)),
+          named: "view-controller-dark")
+      }
+    #endif
+  }
+
+  func testNSViewScale() {
+    #if os(macOS)
+      let view = NSView()
+      view.frame = CGRect(x: 0.0, y: 0.0, width: 10.0, height: 10.0)
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.blue.cgColor
+      view.layer?.cornerRadius = 5
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        // Pinned scales render machine-independently: 10 pt becomes 10 px at 1x, 20 px at 2x,
+        // regardless of the host display's backing scale.
+        assertSnapshot(of: view, as: .image(scale: 1), named: "1x")
+        assertSnapshot(of: view, as: .image(scale: 2), named: "2x")
+      }
+    #endif
+  }
+
+  func testNSHostingController() {
+    #if os(macOS)
+      struct MyView: SwiftUI.View {
+        var body: some SwiftUI.View {
+          HStack {
+            Image(systemName: "checkmark.circle.fill")
+            Text("Checked").fixedSize()
+          }
+          .padding(5)
+          .background(RoundedRectangle(cornerRadius: 5.0).fill(Color.blue))
+          .padding(10)
+        }
+      }
+      let controller = NSHostingController(rootView: MyView().background(Color.yellow))
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        assertSnapshot(of: controller, as: .image(size: CGSize(width: 200.0, height: 100.0)))
       }
     #endif
   }
@@ -1185,29 +1269,45 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testCALayer() {
-    #if os(iOS) || os(visionOS)
+    #if os(iOS) || os(visionOS) || os(macOS)
       let layer = CALayer()
       layer.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
-      layer.backgroundColor = UIColor.red.cgColor
       layer.borderWidth = 4.0
-      layer.borderColor = UIColor.black.cgColor
-      #if os(visionOS)
-        assertSnapshot(of: layer, as: .image, named: "visionos")
+      #if os(macOS)
+        layer.backgroundColor = NSColor.red.cgColor
+        layer.borderColor = NSColor.black.cgColor
+        if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+          assertSnapshot(of: layer, as: .image, named: "macos")
+        }
       #else
-        assertSnapshot(of: layer, as: .image)
+        layer.backgroundColor = UIColor.red.cgColor
+        layer.borderColor = UIColor.black.cgColor
+        #if os(visionOS)
+          assertSnapshot(of: layer, as: .image, named: "visionos")
+        #else
+          assertSnapshot(of: layer, as: .image)
+        #endif
       #endif
     #endif
   }
 
   func testCALayerWithGradient() {
-    #if os(iOS) || os(visionOS)
+    #if os(iOS) || os(visionOS) || os(macOS)
       let baseLayer = CALayer()
       baseLayer.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
       let gradientLayer = CAGradientLayer()
-      gradientLayer.colors = [UIColor.red.cgColor, UIColor.yellow.cgColor]
+      #if os(macOS)
+        gradientLayer.colors = [NSColor.red.cgColor, NSColor.yellow.cgColor]
+      #else
+        gradientLayer.colors = [UIColor.red.cgColor, UIColor.yellow.cgColor]
+      #endif
       gradientLayer.frame = baseLayer.frame
       baseLayer.addSublayer(gradientLayer)
-      #if os(visionOS)
+      #if os(macOS)
+        if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+          assertSnapshot(of: baseLayer, as: .image, named: "macos")
+        }
+      #elseif os(visionOS)
         assertSnapshot(of: baseLayer, as: .image, named: "visionos")
       #else
         assertSnapshot(of: baseLayer, as: .image)
@@ -1500,6 +1600,40 @@ final class SnapshotTestingTests: BaseTestCase {
         of: view, as: .image(layout: .fixed(width: 300.0, height: 100.0)), named: "fixed")
       assertSnapshot(
         of: view, as: .image(layout: .device(config: .visionOSWindow)), named: "device")
+    }
+  #endif
+
+  #if os(macOS)
+    func testSwiftUIView_macOS() {
+      struct MyView: SwiftUI.View {
+        var body: some SwiftUI.View {
+          HStack {
+            Image(systemName: "checkmark.circle.fill")
+            Text("Checked").fixedSize()
+          }
+          .padding(5)
+          .background(RoundedRectangle(cornerRadius: 5.0).fill(Color.blue))
+          .padding(10)
+        }
+      }
+      let view = MyView().background(Color.yellow)
+
+      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        assertSnapshot(of: view, as: .image())
+        assertSnapshot(of: view, as: .image(layout: .sizeThatFits), named: "size-that-fits")
+        assertSnapshot(
+          of: view, as: .image(layout: .fixed(width: 300.0, height: 100.0)), named: "fixed")
+
+        // System colors resolve against the effective appearance, so the two renders must differ.
+        if #available(macOS 12.0, *) {
+          let appearanceView = MyView().background(Color(nsColor: .windowBackgroundColor))
+          assertSnapshot(
+            of: appearanceView, as: .image(appearance: NSAppearance(named: .aqua)), named: "light")
+          assertSnapshot(
+            of: appearanceView, as: .image(appearance: NSAppearance(named: .darkAqua)),
+            named: "dark")
+        }
+      }
     }
   #endif
 }

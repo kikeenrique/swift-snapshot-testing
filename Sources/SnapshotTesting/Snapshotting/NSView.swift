@@ -20,21 +20,47 @@
     ///     [the precision](http://zschuessler.github.io/DeltaE/learn/#toc-defining-delta-e) of the
     ///     human eye.
     ///   - size: A view size override.
+    ///   - appearance: An appearance override (e.g. `NSAppearance(named: .darkAqua)`); `nil` uses
+    ///     the inherited appearance.
+    ///   - scale: A rendering scale override (e.g. `2` for @2x). `nil` follows the host display's
+    ///     backing scale, which makes references machine-dependent; pin a scale to record
+    ///     references that are portable across machines. Does not apply to SceneKit, SpriteKit, or
+    ///     WebKit views, which render through their own snapshot APIs at a fixed @2x.
     public static func image(
-      precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil
+      precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil,
+      appearance: NSAppearance? = nil, scale: CGFloat? = nil
     ) -> Snapshotting {
       return SimplySnapshotting.image(
         precision: precision, perceptualPrecision: perceptualPrecision
       ).asyncPullback { view in
         let initialSize = view.frame.size
         if let size = size { view.frame.size = size }
+        if let appearance = appearance { view.appearance = appearance }
         guard view.frame.width > 0, view.frame.height > 0 else {
           fatalError("View not renderable to image at size \(view.frame.size)")
         }
         return view.snapshot
           ?? Async { callback in
             addImagesForRenderedViews(view).sequence().run { views in
-              let bitmapRep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+              let bitmapRep: NSBitmapImageRep
+              if let scale = scale {
+                let rep = NSBitmapImageRep(
+                  bitmapDataPlanes: nil,
+                  pixelsWide: Int(view.bounds.width * scale),
+                  pixelsHigh: Int(view.bounds.height * scale),
+                  bitsPerSample: 8,
+                  samplesPerPixel: 4,
+                  hasAlpha: true,
+                  isPlanar: false,
+                  colorSpaceName: .calibratedRGB,
+                  bytesPerRow: 0,
+                  bitsPerPixel: 0
+                )!
+                rep.size = view.bounds.size
+                bitmapRep = rep
+              } else {
+                bitmapRep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+              }
               view.cacheDisplay(in: view.bounds, to: bitmapRep)
               let image = NSImage(size: view.bounds.size)
               image.addRepresentation(bitmapRep)
