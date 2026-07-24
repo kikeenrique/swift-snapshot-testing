@@ -297,6 +297,37 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
+  func testNSViewRendersAtPinnedScale() {
+    #if os(macOS)
+      // A windowless view has a 1x backing scale, so `cacheDisplay(in:to:)` used to rasterize at
+      // 1x and stretch into the 2x rep (blurry references). The pinned-scale branch must instead
+      // rasterize at the requested scale.
+      final class ScaleReportingView: NSView {
+        var renderedScale: CGFloat = 0
+        override func draw(_ dirtyRect: NSRect) {
+          renderedScale = NSGraphicsContext.current?.cgContext.ctm.a ?? 0
+          NSColor.white.setFill()
+          dirtyRect.fill()
+        }
+      }
+
+      func render(scale: CGFloat) -> (renderedScale: CGFloat, image: NSImage) {
+        let view = ScaleReportingView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+        var image: NSImage!
+        Snapshotting<NSView, NSImage>.image(scale: scale).snapshot(view).run { image = $0 }
+        return (view.renderedScale, image)
+      }
+
+      let (scale1, image1) = render(scale: 1)
+      XCTAssertEqual(scale1, 1)
+      XCTAssertEqual(image1.representations[0].pixelsWide, 10)
+
+      let (scale2, image2) = render(scale: 2)
+      XCTAssertEqual(scale2, 2)
+      XCTAssertEqual(image2.representations[0].pixelsWide, 20)
+    #endif
+  }
+
   func testNSHostingController() {
     #if os(macOS)
       struct MyView: SwiftUI.View {

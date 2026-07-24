@@ -58,10 +58,26 @@
                 )!
                 rep.size = view.bounds.size
                 bitmapRep = rep
+                // `cacheDisplay(in:to:)` rasterizes at the view's backing scale, and a windowless
+                // view falls back to 1x — stretching a soft 1x render into the 2x rep. Hosting the
+                // view in an offscreen window that reports the pinned scale makes AppKit rasterize
+                // at that scale.
+                if view.window == nil {
+                  let window = ScaledWindow(scale: scale, contentRect: view.bounds)
+                  window.contentView = view
+                  view.layoutSubtreeIfNeeded()
+                  view.cacheDisplay(in: view.bounds, to: rep)
+                  window.contentView = nil
+                  // Detaching dirties layout flags across the subtree, which would leak into a
+                  // subsequent `recursiveDescription` snapshot — settle them back down.
+                  view.layoutSubtreeIfNeeded()
+                } else {
+                  view.cacheDisplay(in: view.bounds, to: rep)
+                }
               } else {
                 bitmapRep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+                view.cacheDisplay(in: view.bounds, to: bitmapRep)
               }
-              view.cacheDisplay(in: view.bounds, to: bitmapRep)
               let image = NSImage(size: view.bounds.size)
               image.addRepresentation(bitmapRep)
               callback(image)
@@ -71,6 +87,21 @@
           }
       }
     }
+  }
+
+  /// An offscreen window that reports a fixed backing scale, so `cacheDisplay(in:to:)` rasterizes
+  /// hosted views at that scale instead of the host display's.
+  private final class ScaledWindow: NSWindow {
+    private let scale: CGFloat
+
+    init(scale: CGFloat, contentRect: NSRect) {
+      self.scale = scale
+      super.init(
+        contentRect: contentRect, styleMask: [.borderless], backing: .buffered, defer: false)
+      self.isReleasedWhenClosed = false
+    }
+
+    override var backingScaleFactor: CGFloat { self.scale }
   }
 
   extension Snapshotting where Value == NSView, Format == String {
