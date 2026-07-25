@@ -213,7 +213,9 @@ final class SnapshotTestingTests: BaseTestCase {
       button.title = "Push Me"
       button.sizeToFit()
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(of: button, as: .image(scale: 2))
+        // Text glyph antialiasing differs across macOS point releases, so allow a small
+        // perceptual tolerance on top of the pinned scale.
+        assertSnapshot(of: button, as: .image(perceptualPrecision: 0.98, scale: 2))
         assertSnapshot(of: button, as: .recursiveDescription)
       }
     #endif
@@ -408,7 +410,8 @@ final class SnapshotTestingTests: BaseTestCase {
       let controller = NSHostingController(rootView: MyView().background(Color.yellow))
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(
-          of: controller, as: .image(size: CGSize(width: 200.0, height: 100.0), scale: 2))
+          of: controller,
+          as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2))
       }
     #endif
   }
@@ -433,13 +436,17 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         label.text = "Hello."
         #if os(macOS)
-          assertSnapshot(of: label, as: .image(precision: 0.9, scale: 2), named: platform)
+          assertSnapshot(
+            of: label, as: .image(precision: 0.9, perceptualPrecision: 0.98, scale: 2),
+            named: platform)
         #else
           assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
         #endif
         label.text = "Hello"
         #if os(macOS)
-          assertSnapshot(of: label, as: .image(precision: 0.9, scale: 2), named: platform)
+          assertSnapshot(
+            of: label, as: .image(precision: 0.9, perceptualPrecision: 0.98, scale: 2),
+            named: platform)
         #else
           assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
         #endif
@@ -1554,21 +1561,28 @@ final class SnapshotTestingTests: BaseTestCase {
       let view = MyView().background(Color.yellow)
 
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(of: view, as: .image(scale: 2))
+        // Text glyph antialiasing differs across macOS point releases, so allow a small
+        // perceptual tolerance on top of the pinned scale.
+        assertSnapshot(of: view, as: .image(perceptualPrecision: 0.98, scale: 2))
         assertSnapshot(
-          of: view, as: .image(layout: .sizeThatFits, scale: 2), named: "size-that-fits")
+          of: view, as: .image(perceptualPrecision: 0.98, layout: .sizeThatFits, scale: 2),
+          named: "size-that-fits")
         assertSnapshot(
-          of: view, as: .image(layout: .fixed(width: 300.0, height: 100.0), scale: 2),
+          of: view,
+          as: .image(perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0), scale: 2),
           named: "fixed")
 
         // System colors resolve against the effective appearance, so the two renders must differ.
         if #available(macOS 12.0, *) {
           let appearanceView = MyView().background(Color(nsColor: .windowBackgroundColor))
           assertSnapshot(
-            of: appearanceView, as: .image(appearance: NSAppearance(named: .aqua), scale: 2),
+            of: appearanceView,
+            as: .image(perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua), scale: 2),
             named: "light")
           assertSnapshot(
-            of: appearanceView, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2),
+            of: appearanceView,
+            as: .image(
+              perceptualPrecision: 0.98, appearance: NSAppearance(named: .darkAqua), scale: 2),
             named: "dark")
         }
       }
