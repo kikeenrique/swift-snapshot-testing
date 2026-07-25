@@ -24,8 +24,12 @@
     ///     the inherited appearance.
     ///   - scale: A rendering scale override (e.g. `2` for @2x). `nil` follows the host display's
     ///     backing scale, which makes references machine-dependent; pin a scale to record
-    ///     references that are portable across machines. Does not apply to SceneKit, SpriteKit, or
-    ///     WebKit views, which render through their own snapshot APIs at a fixed @2x.
+    ///     references that are portable across machines. A pinned scale is honored for views not
+    ///     yet attached to a window (they are temporarily hosted in an offscreen window that
+    ///     rasterizes at that scale); a view already in a window rasterizes at that window's
+    ///     backing scale, with the pinned scale only sizing the bitmap. Does not apply to
+    ///     SceneKit, SpriteKit, or WebKit views, which render through their own snapshot APIs at
+    ///     a fixed @2x.
     public static func image(
       precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil,
       appearance: NSAppearance? = nil, scale: CGFloat? = nil

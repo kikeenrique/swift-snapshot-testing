@@ -21,7 +21,9 @@
     ///     the inherited appearance.
     ///   - scale: A rendering scale override (e.g. `2` for @2x). `nil` follows the host display's
     ///     backing scale, which makes references machine-dependent; pin a scale to record
-    ///     references that are portable across machines.
+    ///     references that are portable across machines. A pinned scale is honored for views not
+    ///     yet attached to a window; a view already in a window rasterizes at that window's
+    ///     backing scale.
     public static func image(
       precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil,
       appearance: NSAppearance? = nil, scale: CGFloat? = nil

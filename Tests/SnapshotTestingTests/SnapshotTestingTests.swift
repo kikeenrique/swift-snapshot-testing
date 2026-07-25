@@ -328,6 +328,69 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
+  func testNSViewControlRendersContentAtPinnedScale() {
+    #if os(macOS)
+      // AppKit controls only draw through the window-backed render path — a context-only
+      // approach silently produces an empty bitmap. Guard that a windowless control still
+      // renders real content at a pinned scale.
+      let button = NSButton()
+      button.bezelStyle = .rounded
+      button.title = "Push Me"
+      button.sizeToFit()
+
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(button).run { image = $0 }
+
+      let rep = image.representations[0] as! NSBitmapImageRep
+      XCTAssertEqual(CGFloat(rep.pixelsWide), button.bounds.width * 2)
+      XCTAssertEqual(CGFloat(rep.pixelsHigh), button.bounds.height * 2)
+
+      var uniqueColors: Set<UInt32> = []
+      for y in 0..<rep.pixelsHigh {
+        for x in 0..<rep.pixelsWide {
+          guard let color = rep.colorAt(x: x, y: y) else { continue }
+          uniqueColors.insert(
+            UInt32(color.redComponent * 255) << 24 | UInt32(color.greenComponent * 255) << 16
+              | UInt32(color.blueComponent * 255) << 8 | UInt32(color.alphaComponent * 255)
+          )
+        }
+      }
+      XCTAssertGreaterThan(
+        uniqueColors.count, 10, "Expected bezel and antialiased text, got a near-uniform bitmap"
+      )
+    #endif
+  }
+
+  func testNSViewInWindowRendersAtWindowScale() {
+    #if os(macOS)
+      // Documented fallback: a view already attached to a window rasterizes at that window's
+      // backing scale — the pinned scale only sizes the bitmap.
+      final class ScaleReportingView: NSView {
+        var renderedScale: CGFloat = 0
+        override func draw(_ dirtyRect: NSRect) {
+          renderedScale = NSGraphicsContext.current?.cgContext.ctm.a ?? 0
+          NSColor.white.setFill()
+          dirtyRect.fill()
+        }
+      }
+
+      let view = ScaleReportingView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+      let window = NSWindow(
+        contentRect: view.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = view
+
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
+
+      XCTAssertEqual(view.renderedScale, window.backingScaleFactor)
+      XCTAssertEqual(image.representations[0].pixelsWide, 20)
+
+      window.contentView = nil
+    #endif
+  }
+
   func testNSHostingController() {
     #if os(macOS)
       struct MyView: SwiftUI.View {
