@@ -411,7 +411,8 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(
           of: controller,
-          as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2))
+          as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2)
+        )
       }
     #endif
   }
@@ -1569,7 +1570,8 @@ final class SnapshotTestingTests: BaseTestCase {
           named: "size-that-fits")
         assertSnapshot(
           of: view,
-          as: .image(perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0), scale: 2),
+          as: .image(
+            perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0), scale: 2),
           named: "fixed")
 
         // System colors resolve against the effective appearance, so the two renders must differ.
