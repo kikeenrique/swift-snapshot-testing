@@ -364,33 +364,39 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
-  func testNSViewInWindowFallback() {
+  func testNSViewInWindowRendersAtPinnedScale() {
     #if os(macOS)
-      // Documented fallback: a view already attached to a window is not re-hosted. The pinned
-      // scale still sizes the bitmap and the draw-context transform (verified on both a Retina
-      // host and a 1x CI runner); what keeps following the window's backing scale is layer-backed
-      // content rasterization, which a draw(_:)-based probe cannot observe.
-      final class ScaleReportingView: NSView {
-        var renderedScale: CGFloat = 0
-        override func draw(_ dirtyRect: NSRect) {
-          renderedScale = NSGraphicsContext.current?.cgContext.ctm.a ?? 0
-          NSColor.white.setFill()
-          dirtyRect.fill()
-        }
+      // A view already hosted in a window is temporarily re-hosted at the pinned scale and fully
+      // restored, so a pinned-scale render is byte-identical to the same view rendered detached —
+      // regardless of the original window's backing scale (1x here, mimicking a headless CI
+      // runner; the same holds on a Retina host).
+      final class OneXWindow: NSWindow {
+        override var backingScaleFactor: CGFloat { 1 }
       }
 
-      let view = ScaleReportingView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
-      let window = NSWindow(
-        contentRect: view.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      func makeLabel() -> NSView {
+        let label = NSTextField(labelWithString: "Push Me")
+        label.frame = CGRect(x: 0, y: 0, width: 80, height: 20)
+        return label
+      }
+      func render(_ view: NSView) -> Data {
+        var image: NSImage!
+        Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
+        return image.tiffRepresentation!
+      }
+
+      let detached = render(makeLabel())
+
+      let hosted = makeLabel()
+      let window = OneXWindow(
+        contentRect: hosted.bounds, styleMask: [.borderless], backing: .buffered, defer: false
       )
       window.isReleasedWhenClosed = false
-      window.contentView = view
+      window.contentView = hosted
+      let inWindow = render(hosted)
 
-      var image: NSImage!
-      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
-
-      XCTAssertEqual(view.renderedScale, 2)
-      XCTAssertEqual(image.representations[0].pixelsWide, 20)
+      XCTAssertEqual(inWindow, detached)
+      XCTAssertTrue(hosted.window === window, "view must be restored to its original window")
 
       window.contentView = nil
     #endif
