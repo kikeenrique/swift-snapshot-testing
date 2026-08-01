@@ -895,13 +895,30 @@
                     callback(Image())
                     return
                   }
-                  let configuration = WKSnapshotConfiguration()
-                  if #available(iOS 13, macOS 10.15, *) {
-                    configuration.afterScreenUpdates = false
-                  }
-                  wkWebView.takeSnapshot(with: configuration) { image, _ in
-                    callback(image!)
-                  }
+                  #if os(visionOS)
+                    // On visionOS, WKWebView.takeSnapshot returns a fully transparent
+                    // image even for loaded, JavaScript-responsive content, while
+                    // rendering the layer captures the page correctly — the opposite of
+                    // iOS/macOS, where out-of-process web content is only available via
+                    // takeSnapshot. The web content process commits its layers
+                    // asynchronously after loading finishes, so give it a moment before
+                    // rendering.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                      let renderer = UIGraphicsImageRenderer(bounds: wkWebView.bounds)
+                      callback(
+                        renderer.image { ctx in
+                          wkWebView.layer.render(in: ctx.cgContext)
+                        })
+                    }
+                  #else
+                    let configuration = WKSnapshotConfiguration()
+                    if #available(iOS 13, macOS 10.15, *) {
+                      configuration.afterScreenUpdates = false
+                    }
+                    wkWebView.takeSnapshot(with: configuration) { image, _ in
+                      callback(image!)
+                    }
+                  #endif
                 }
               } else {
                 #if os(iOS)
@@ -916,9 +933,12 @@
               var subscription: NSKeyValueObservation?
               subscription = wkWebView.observe(\.isLoading, options: [.initial, .new]) {
                 (webview, change) in
-                subscription?.invalidate()
-                subscription = nil
+                // NB: Keep observing until loading actually finishes. The observer also
+                //     fires immediately (`.initial`) with `isLoading == true`; tearing it
+                //     down on that first event would leave the snapshot waiting forever.
                 if change.newValue == false {
+                  subscription?.invalidate()
+                  subscription = nil
                   work()
                 }
               }

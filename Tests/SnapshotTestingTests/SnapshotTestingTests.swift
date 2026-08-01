@@ -1322,11 +1322,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testWebView() throws {
-    // This test stays excluded on visionOS: the WebKit content process cannot render in a
-    // packageless xctest host there (RunningBoard denies it the
-    // com.apple.runningboard.assertions.webkit assertion), so WKWebView.takeSnapshot always
-    // returns a fully transparent image and the reference would assert nothing.
-    #if os(iOS) || os(macOS)
+    #if os(iOS) || os(macOS) || os(visionOS)
       let fixtureUrl = URL(fileURLWithPath: String(#file), isDirectory: false)
         .deletingLastPathComponent()
         .appendingPathComponent("__Fixtures__/pointfree.html")
@@ -1334,10 +1330,13 @@ final class SnapshotTestingTests: BaseTestCase {
       let webView = WKWebView()
       webView.loadHTMLString(html, baseURL: nil)
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        // NB: The generous timeout absorbs the one-off WebKit content process startup,
+        //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: webView,
           as: .image(size: .init(width: 800, height: 600)),
-          named: platform
+          named: platform,
+          timeout: 30
         )
       }
     #endif
@@ -1396,19 +1395,19 @@ final class SnapshotTestingTests: BaseTestCase {
       stackView.axis = .vertical
 
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        // NB: The generous timeout absorbs the one-off WebKit content process startup,
+        //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: stackView,
           as: .image(size: .init(width: 800, height: 600)),
-          named: platform
+          named: platform,
+          timeout: 30
         )
       }
     #endif
   }
 
-  // These tests stay excluded on visionOS for the same reason as testWebView: the WebKit
-  // content process cannot render in a packageless xctest host there, so the snapshots
-  // always come back fully transparent.
-  #if os(iOS) || os(macOS)
+  #if os(iOS) || os(macOS) || os(visionOS)
     final class ManipulatingWKWebViewNavigationDelegate: NSObject, WKNavigationDelegate {
       func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         webView.evaluateJavaScript("document.body.children[0].classList.remove(\"hero\")")  // Change layout
@@ -1425,10 +1424,13 @@ final class SnapshotTestingTests: BaseTestCase {
       let html = try String(contentsOf: fixtureUrl)
       webView.loadHTMLString(html, baseURL: nil)
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        // NB: The generous timeout absorbs the one-off WebKit content process startup,
+        //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: webView,
           as: .image(size: .init(width: 800, height: 600)),
-          named: platform
+          named: platform,
+          timeout: 30
         )
       }
       _ = manipulatingWKWebViewNavigationDelegate
@@ -1455,10 +1457,13 @@ final class SnapshotTestingTests: BaseTestCase {
       let html = try String(contentsOf: fixtureUrl)
       webView.loadHTMLString(html, baseURL: nil)
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        // NB: The generous timeout absorbs the one-off WebKit content process startup,
+        //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: webView,
           as: .image(size: .init(width: 800, height: 600)),
-          named: platform
+          named: platform,
+          timeout: 30
         )
       }
       _ = cancellingWKWebViewNavigationDelegate
