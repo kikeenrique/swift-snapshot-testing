@@ -7,7 +7,7 @@
   #if os(iOS) || os(tvOS) || os(visionOS)
     import UIKit
   #endif
-  #if os(iOS) || os(macOS)
+  #if os(iOS) || os(macOS) || os(visionOS)
     import WebKit
   #endif
 
@@ -885,7 +885,7 @@
           fatalError("Taking SKView snapshots requires macOS 10.11 or greater")
         }
       }
-      #if os(iOS) || os(macOS)
+      #if os(iOS) || os(macOS) || os(visionOS)
         if let wkWebView = self as? WKWebView {
           return Async<Image> { callback in
             let work = {
