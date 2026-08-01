@@ -364,10 +364,12 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
-  func testNSViewInWindowRendersAtWindowScale() {
+  func testNSViewInWindowFallback() {
     #if os(macOS)
-      // Documented fallback: a view already attached to a window rasterizes at that window's
-      // backing scale — the pinned scale only sizes the bitmap.
+      // Documented fallback: a view already attached to a window is not re-hosted. The pinned
+      // scale still sizes the bitmap and the draw-context transform (verified on both a Retina
+      // host and a 1x CI runner); what keeps following the window's backing scale is layer-backed
+      // content rasterization, which a draw(_:)-based probe cannot observe.
       final class ScaleReportingView: NSView {
         var renderedScale: CGFloat = 0
         override func draw(_ dirtyRect: NSRect) {
@@ -387,7 +389,7 @@ final class SnapshotTestingTests: BaseTestCase {
       var image: NSImage!
       Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
 
-      XCTAssertEqual(view.renderedScale, window.backingScaleFactor)
+      XCTAssertEqual(view.renderedScale, 2)
       XCTAssertEqual(image.representations[0].pixelsWide, 20)
 
       window.contentView = nil
