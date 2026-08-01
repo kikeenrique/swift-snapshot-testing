@@ -253,10 +253,22 @@ final class SnapshotTestingTests: BaseTestCase {
         label.isEditable = false
       #endif
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        label.text = "Hello."
-        assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
-        label.text = "Hello"
-        assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
+        #if os(visionOS)
+          // visionOS resolves dynamic colors as dark appearance by default, which would
+          // render the label text white on this white background and make the precision
+          // comparison vacuous. Pin light appearance like the `visionOSWindow` config does.
+          let strategy: Snapshotting<UIView, UIImage> = .image(
+            precision: 0.9, traits: .init(userInterfaceStyle: .light))
+          label.text = "Hello."
+          assertSnapshot(of: label, as: strategy, named: platform)
+          label.text = "Hello"
+          assertSnapshot(of: label, as: strategy, named: platform)
+        #else
+          label.text = "Hello."
+          assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
+          label.text = "Hello"
+          assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
+        #endif
       }
     #endif
   }
@@ -397,7 +409,11 @@ final class SnapshotTestingTests: BaseTestCase {
           of: tableViewController,
           as: [
             "window-visionos": .image(on: .visionOSWindow),
-            "fixed-visionos": .image(size: .init(width: 640, height: 480)),
+            // visionOS resolves dynamic colors as dark appearance by default, which would
+            // render the cell text white on a clear background. Pin light appearance like
+            // the `visionOSWindow` config does.
+            "fixed-visionos": .image(
+              size: .init(width: 640, height: 480), traits: .init(userInterfaceStyle: .light)),
           ])
       #else
         assertSnapshots(
@@ -791,6 +807,18 @@ final class SnapshotTestingTests: BaseTestCase {
         }
 
         let myViewController = MyViewController()
+        #if os(visionOS)
+          // UITabBarController on visionOS resolves its content in dark appearance even when
+          // a light-style trait override is applied anywhere in the hierarchy, which would
+          // render the default label color white on this white background. Fix the label
+          // color instead.
+          for label in [
+            myViewController.topLabel, myViewController.leadingLabel,
+            myViewController.trailingLabel, myViewController.bottomLabel,
+          ] {
+            label.textColor = .black
+          }
+        #endif
         let navController = UINavigationController(rootViewController: myViewController)
         let viewController = UITabBarController()
         viewController.setViewControllers([navController], animated: false)
@@ -989,12 +1017,20 @@ final class SnapshotTestingTests: BaseTestCase {
         allContentSizes.forEach { name, contentSize in
           #if os(visionOS)
             let fixtureName = "label-\(name)-visionos"
+            // visionOS resolves dynamic colors as dark appearance by default, which would
+            // render the label text white on a clear background. Pin light appearance like
+            // the `visionOSWindow` config does.
+            let traits = UITraitCollection(traitsFrom: [
+              .init(preferredContentSizeCategory: contentSize),
+              .init(userInterfaceStyle: .light),
+            ])
           #else
             let fixtureName = "label-\(name)"
+            let traits = UITraitCollection(preferredContentSizeCategory: contentSize)
           #endif
           assertSnapshot(
             of: label,
-            as: .image(traits: .init(preferredContentSizeCategory: contentSize)),
+            as: .image(traits: traits),
             named: fixtureName
           )
         }

@@ -517,7 +517,13 @@
           return .init(
             safeArea: .zero,
             size: .init(width: width, height: height),
-            traits: .init(displayScale: 2)
+            // visionOS resolves dynamic colors as dark appearance by default, which renders
+            // `.label` text white and `.systemBackground` clear. Pin light appearance so
+            // snapshots resolve the same dynamic colors as the iOS device configs.
+            traits: .init(traitsFrom: [
+              .init(displayScale: 2),
+              .init(userInterfaceStyle: .light),
+            ])
           )
         }
       #endif
