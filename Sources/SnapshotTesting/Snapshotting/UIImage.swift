@@ -250,51 +250,35 @@
   /// Computes a planar-8 buffer where each byte is the largest per-channel difference between the
   /// corresponding pixels of the two images.
   private func componentDiffPlane(_ old: CGImage, _ new: CGImage) -> [UInt8]? {
-    // NB: The images are redrawn into contexts with a known format instead of reading their data
-    //     providers directly, whose bytes may be planar, grayscale, row-padded or in a different
-    //     channel order. This is the same normalization `compare(_:_:precision:)` performs.
-    guard let oldContext = context(for: old), let oldData = oldContext.data,
-      let newContext = context(for: new), let newData = newContext.data
+    guard let oldData = old.dataProvider?.data,
+      let newData = new.dataProvider?.data
     else {
       return nil
     }
 
-    let width = old.width
-    let height = old.height
-    let oldBytes = oldData.assumingMemoryBound(to: UInt8.self)
-    let newBytes = newData.assumingMemoryBound(to: UInt8.self)
-    let oldBytesPerRow = oldContext.bytesPerRow
-    let newBytesPerRow = newContext.bytesPerRow
-    var diffBytes = [UInt8](repeating: 0, count: width * height)
+    let pixelCount = old.width * old.height
+    let oldBytes = CFDataGetBytePtr(oldData)!
+    let newBytes = CFDataGetBytePtr(newData)!
+    var diffBytes = [UInt8](repeating: 0, count: pixelCount)
 
     // NB: We are purposely using a verbose 'while' loop instead of a 'for in' loop.  When the
     //     compiler doesn't have optimizations enabled, like in test targets, a `while` loop is
     //     significantly faster than a `for` loop for iterating through the elements of a memory
     //     buffer. Details can be found in [SR-6983](https://github.com/apple/swift/issues/49531)
-    var row = 0
-    while row < height {
-      defer { row += 1 }
-      let oldRowOffset = row * oldBytesPerRow
-      let newRowOffset = row * newBytesPerRow
-      let diffRowOffset = row * width
-      var column = 0
-      while column < width {
-        defer { column += 1 }
-        let oldOffset = oldRowOffset + column * imageContextBytesPerPixel
-        let newOffset = newRowOffset + column * imageContextBytesPerPixel
+    var index = 0
+    while index < pixelCount {
+      defer { index += 1 }
+      let pixelOffset = index * imageContextBytesPerPixel
 
-        let rDiff = abs(Int16(oldBytes[oldOffset]) - Int16(newBytes[newOffset]))
-        let gDiff = abs(Int16(oldBytes[oldOffset + 1]) - Int16(newBytes[newOffset + 1]))
-        let bDiff = abs(Int16(oldBytes[oldOffset + 2]) - Int16(newBytes[newOffset + 2]))
-        let aDiff = abs(Int16(oldBytes[oldOffset + 3]) - Int16(newBytes[newOffset + 3]))
+      let rDiff = abs(Int16(oldBytes[pixelOffset]) - Int16(newBytes[pixelOffset]))
+      let gDiff = abs(Int16(oldBytes[pixelOffset + 1]) - Int16(newBytes[pixelOffset + 1]))
+      let bDiff = abs(Int16(oldBytes[pixelOffset + 2]) - Int16(newBytes[pixelOffset + 2]))
+      let aDiff = abs(Int16(oldBytes[pixelOffset + 3]) - Int16(newBytes[pixelOffset + 3]))
 
-        diffBytes[diffRowOffset + column] = UInt8(max(rDiff, gDiff, bDiff, aDiff))
-      }
+      diffBytes[index] = UInt8(max(rDiff, gDiff, bDiff, aDiff))
     }
 
-    // NB: The contexts own the pixel buffers the pointers above read from, so they must outlive
-    //     the loop.
-    return withExtendedLifetime((oldContext, newContext)) { diffBytes }
+    return diffBytes
   }
 
   /// Contrast-stretches a planar-8 diff buffer so faint differences become visible and renders it
