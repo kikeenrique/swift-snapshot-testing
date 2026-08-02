@@ -857,53 +857,44 @@
   }
 
   #if os(visionOS)
-    /// How long to wait for the out-of-process web content to reach the web view's layer
-    /// tree before snapshotting whatever has rendered so far.
-    private let webContentRenderTimeout: TimeInterval = 5
-    private let webContentPollInterval: TimeInterval = 0.05
-    /// Probes render below the snapshot scale: a probe only answers whether the page has
-    /// shown up and stopped changing, and rasterizing at full scale twenty times a second
-    /// costs far more than that answer is worth.
-    private let webContentProbeScale: CGFloat = 0.5
-    /// visionOS renders at 2x, matching `ViewImageConfig.visionOSWindow`. Pinning the
-    /// scale keeps the snapshot's pixel dimensions independent of whatever display scale
-    /// the renderer would otherwise inherit from the environment.
+    /// visionOS renders at 2x, matching `ViewImageConfig.visionOSWindow`. Pinning the scale
+    /// keeps the snapshot's pixel dimensions independent of whatever display scale the
+    /// renderer would otherwise inherit from the environment.
     private let webContentSnapshotScale: CGFloat = 2
 
-    private func renderWebContent(of webView: WKWebView, scale: CGFloat) -> UIImage {
+    /// Resolves once the web content process has painted a frame, by waiting for two animation
+    /// frames inside the page.
+    ///
+    /// Waiting happens twice. Messages to the content process are handled in order, so a wait
+    /// is only guaranteed to observe script that was submitted before it — and the snapshot
+    /// starts from the `isLoading` observer, which fires before `webView(_:didFinish:)` gives a
+    /// navigation delegate the chance to change the page. The first wait spans several frames
+    /// of real time, by which point any such script has been submitted, so the second one
+    /// resolves after it has been applied and painted.
+    private func waitForRenderedWebContent(
+      of webView: WKWebView, completion: @escaping () -> Void
+    ) {
+      func waitForFrame(then next: @escaping () -> Void) {
+        webView.callAsyncJavaScript(
+          """
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+          """,
+          in: nil,
+          in: .page
+        ) { _ in
+          next()
+        }
+      }
+      waitForFrame { waitForFrame(then: completion) }
+    }
+
+    private func renderWebContent(of webView: WKWebView) -> UIImage {
       let format = UIGraphicsImageRendererFormat.preferred()
-      format.scale = scale
+      format.scale = webContentSnapshotScale
       return UIGraphicsImageRenderer(bounds: webView.bounds, format: format).image {
         rendererContext in
         webView.layer.render(in: rendererContext.cgContext)
       }
-    }
-
-    private func pixels(of image: UIImage) -> Data? {
-      guard let data = image.cgImage?.dataProvider?.data else { return nil }
-      return data as Data
-    }
-
-    /// Whether every pixel of the image is the same color, which is how a web view whose
-    /// content process has not committed its layers yet renders: bare page background.
-    private func isUniformlyColored(_ image: UIImage) -> Bool {
-      guard let cgImage = image.cgImage,
-        let data = cgImage.dataProvider?.data,
-        let bytes = CFDataGetBytePtr(data)
-      else { return false }
-      let bytesPerPixel = cgImage.bitsPerPixel / 8
-      let bytesPerRow = cgImage.bytesPerRow
-      guard bytesPerPixel > 0, cgImage.width > 0, cgImage.height > 0,
-        CFDataGetLength(data) >= (cgImage.height - 1) * bytesPerRow + cgImage.width * bytesPerPixel
-      else { return false }
-      for y in 0..<cgImage.height {
-        for x in 0..<cgImage.width {
-          if memcmp(bytes + y * bytesPerRow + x * bytesPerPixel, bytes, bytesPerPixel) != 0 {
-            return false
-          }
-        }
-      }
-      return true
     }
   #endif
 
@@ -946,38 +937,15 @@
                     return
                   }
                   #if os(visionOS)
-                    // On visionOS, WKWebView.takeSnapshot returns a fully transparent
-                    // image even for loaded, JavaScript-responsive content, while
-                    // rendering the layer captures the page correctly — the opposite of
-                    // iOS/macOS, where out-of-process web content is only available via
-                    // takeSnapshot. The web content process commits its layers
-                    // asynchronously after loading finishes, so poll the rendered layer
-                    // until the page has actually shown up and stopped changing rather
-                    // than guessing at a fixed delay, which blanks the snapshot whenever
-                    // a cold content process takes longer than the guess. A JavaScript
-                    // round-trip is not a usable readiness signal here: the DOM is
-                    // already complete (and navigation delegates have already run) while
-                    // the layers still render as bare page background.
-                    let deadline = Date(timeIntervalSinceNow: webContentRenderTimeout)
-                    var previousProbe: Data?
-                    func pollForRenderedContent() {
-                      let probe = renderWebContent(of: wkWebView, scale: webContentProbeScale)
-                      let probePixels = pixels(of: probe)
-                      // NB: A page that is legitimately one flat color (a cancelled
-                      //     navigation, say) is indistinguishable from one that has not
-                      //     rendered yet, so it waits out the deadline.
-                      let settled = !isUniformlyColored(probe) && probePixels == previousProbe
-                      previousProbe = probePixels
-                      guard settled || Date() >= deadline else {
-                        DispatchQueue.main.asyncAfter(
-                          deadline: .now() + webContentPollInterval,
-                          execute: pollForRenderedContent
-                        )
-                        return
-                      }
-                      callback(renderWebContent(of: wkWebView, scale: webContentSnapshotScale))
+                    // On visionOS, WKWebView.takeSnapshot returns a fully transparent image
+                    // even for loaded, JavaScript-responsive content, while rendering the
+                    // layer captures the page correctly — the opposite of iOS/macOS, where
+                    // out-of-process web content is only available via takeSnapshot. Loading
+                    // finishing does not mean the content process has painted, so wait for a
+                    // frame from the page itself before rendering its layer.
+                    waitForRenderedWebContent(of: wkWebView) {
+                      callback(renderWebContent(of: wkWebView))
                     }
-                    pollForRenderedContent()
                   #else
                     let configuration = WKSnapshotConfiguration()
                     if #available(iOS 13, macOS 10.15, *) {
