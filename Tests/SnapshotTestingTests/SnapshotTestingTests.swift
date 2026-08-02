@@ -1408,11 +1408,16 @@ final class SnapshotTestingTests: BaseTestCase {
       stackView.axis = .vertical
 
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        #if os(visionOS)
+          let traits: UITraitCollection = visionOSLightTraits
+        #else
+          let traits = UITraitCollection()
+        #endif
         // NB: The generous timeout absorbs the one-off WebKit content process startup,
         //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: stackView,
-          as: .image(size: .init(width: 800, height: 600)),
+          as: .image(size: .init(width: 800, height: 600), traits: traits),
           named: platform,
           timeout: 30
         )
