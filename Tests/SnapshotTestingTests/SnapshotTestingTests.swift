@@ -98,11 +98,7 @@ final class SnapshotTestingTests: BaseTestCase {
         subview.leftAnchor.constraint(equalTo: vc.view.leftAnchor),
         subview.rightAnchor.constraint(equalTo: vc.view.rightAnchor),
       ])
-      #if os(visionOS)
-        assertSnapshot(of: vc, as: .image, named: "visionos")
-      #else
-        assertSnapshot(of: vc, as: .image)
-      #endif
+      assertSnapshot(of: vc, as: .image, named: visionOSSuffix)
     #endif
   }
 
@@ -1125,13 +1121,8 @@ final class SnapshotTestingTests: BaseTestCase {
   func testUIView() {
     #if os(iOS) || os(visionOS)
       let view = UIButton(type: .contactAdd)
-      #if os(visionOS)
-        assertSnapshot(of: view, as: .image, named: "visionos")
-        assertSnapshot(of: view, as: .recursiveDescription, named: "visionos")
-      #else
-        assertSnapshot(of: view, as: .image)
-        assertSnapshot(of: view, as: .recursiveDescription)
-      #endif
+      assertSnapshot(of: view, as: .image, named: visionOSSuffix)
+      assertSnapshot(of: view, as: .recursiveDescription, named: visionOSSuffix)
     #endif
   }
 
@@ -1235,11 +1226,7 @@ final class SnapshotTestingTests: BaseTestCase {
       layer.backgroundColor = UIColor.red.cgColor
       layer.borderWidth = 4.0
       layer.borderColor = UIColor.black.cgColor
-      #if os(visionOS)
-        assertSnapshot(of: layer, as: .image, named: "visionos")
-      #else
-        assertSnapshot(of: layer, as: .image)
-      #endif
+      assertSnapshot(of: layer, as: .image, named: visionOSSuffix)
     #endif
   }
 
@@ -1251,11 +1238,7 @@ final class SnapshotTestingTests: BaseTestCase {
       gradientLayer.colors = [UIColor.red.cgColor, UIColor.yellow.cgColor]
       gradientLayer.frame = baseLayer.frame
       baseLayer.addSublayer(gradientLayer)
-      #if os(visionOS)
-        assertSnapshot(of: baseLayer, as: .image, named: "visionos")
-      #else
-        assertSnapshot(of: baseLayer, as: .image)
-      #endif
+      assertSnapshot(of: baseLayer, as: .image, named: visionOSSuffix)
     #endif
   }
 
@@ -1271,11 +1254,7 @@ final class SnapshotTestingTests: BaseTestCase {
         UINavigationController(rootViewController: UIViewController()),
         UINavigationController(rootViewController: UIViewController()),
       ]
-      #if os(visionOS)
-        assertSnapshot(of: tab, as: .hierarchy, named: "visionos")
-      #else
-        assertSnapshot(of: tab, as: .hierarchy)
-      #endif
+      assertSnapshot(of: tab, as: .hierarchy, named: visionOSSuffix)
     #endif
   }
 

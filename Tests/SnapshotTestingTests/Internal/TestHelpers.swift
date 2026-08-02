@@ -2,6 +2,15 @@ import XCTest
 
 @testable import SnapshotTesting
 
+/// Snapshot name suffix for assertions whose only platform difference is that visionOS records
+/// its own fixture. `nil` is the default of `assertSnapshot(named:)`, so on every other platform
+/// this produces the exact same fixture name as omitting the argument.
+#if os(visionOS)
+  let visionOSSuffix: String? = "visionos"
+#else
+  let visionOSSuffix: String? = nil
+#endif
+
 #if os(iOS)
   let platform = "ios"
 #elseif os(tvOS)
