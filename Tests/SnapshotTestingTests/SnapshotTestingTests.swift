@@ -1356,10 +1356,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testViewWithZeroHeightOrWidth() {
-    // This test stays excluded on visionOS: snapshotting a zero-sized view there produces a
-    // zero-sized image, so the size comparison against the recorded "empty image" placeholder
-    // reference fails (and re-records) on every run, making the test unable to ever pass.
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       var rect = CGRect(x: 0, y: 0, width: 350, height: 0)
       var view = UIView(frame: rect)
       view.backgroundColor = .red
@@ -1378,15 +1375,14 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testViewAgainstEmptyImage() {
-    // This test stays excluded on visionOS: zero-sized views render as the library's
-    // error-placeholder image there, so the reference would just be that placeholder and the
-    // test could not exercise its intent of comparing a real render against an empty image.
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       let rect = CGRect(x: 0, y: 0, width: 0, height: 0)
       let view = UIView(frame: rect)
       view.backgroundColor = .blue
 
-      let failure = verifySnapshot(of: view, as: .image, named: "notEmptyImage")
+      // NB: The comparison is expected to fail, so re-recording must stay off or the suite's
+      //     'record: .failed' mode overwrites the reference with the zero-size placeholder.
+      let failure = verifySnapshot(of: view, as: .image, named: "notEmptyImage", record: .never)
       XCTAssertNotNil(failure)
     #endif
   }
