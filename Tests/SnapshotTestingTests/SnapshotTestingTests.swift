@@ -31,10 +31,17 @@ import XCTest
 // Timeout for the web view assertions. On visionOS the generous value absorbs the one-off WebKit
 // content process startup, which can exceed the default 5 seconds on a cold simulator. Every
 // other platform keeps the default so a hung web view fails fast.
+//
+// visionOS also rasterizes the fixture's SVG logo nondeterministically: repeated runs of an
+// unchanged page alternate between two results that differ by a single 1/255 step on 18 of the
+// image's 1.9M pixels. Comparing those snapshots perceptually absorbs the noise while still
+// failing on any difference a person could see.
 #if os(visionOS)
   private let webViewTimeout: TimeInterval = 30
+  private let webViewPerceptualPrecision: Float = 0.98
 #else
   private let webViewTimeout: TimeInterval = 5
+  private let webViewPerceptualPrecision: Float = 1
 #endif
 
 final class SnapshotTestingTests: BaseTestCase {
@@ -1319,7 +1326,8 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(
           of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
+          as: .image(
+            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
@@ -1383,7 +1391,9 @@ final class SnapshotTestingTests: BaseTestCase {
         #endif
         assertSnapshot(
           of: stackView,
-          as: .image(size: .init(width: 800, height: 600), traits: traits),
+          as: .image(
+            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600),
+            traits: traits),
           named: platform,
           timeout: webViewTimeout
         )
@@ -1410,7 +1420,8 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(
           of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
+          as: .image(
+            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
@@ -1441,7 +1452,8 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(
           of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
+          as: .image(
+            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
