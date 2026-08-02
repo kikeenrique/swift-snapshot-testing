@@ -20,6 +20,14 @@ import XCTest
   import UIKit.UIView
 #endif
 
+#if os(visionOS)
+  // visionOS resolves dynamic colors as dark appearance by default, which renders the
+  // default label color white — invisible against these shared fixtures' light
+  // backgrounds. The visionOS image snapshots pin light appearance so the fixtures
+  // resolve the same dynamic colors as the iOS device configs.
+  private let visionOSLightTraits = UITraitCollection(userInterfaceStyle: .light)
+#endif
+
 final class SnapshotTestingTests: BaseTestCase {
   func testAny() {
     struct User { let id: Int, name: String, bio: String }
@@ -254,11 +262,10 @@ final class SnapshotTestingTests: BaseTestCase {
       #endif
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         #if os(visionOS)
-          // visionOS resolves dynamic colors as dark appearance by default, which would
-          // render the label text white on this white background and make the precision
-          // comparison vacuous. Pin light appearance like the `visionOSWindow` config does.
+          // Without pinned light appearance the label text would render white on this
+          // white background, making the precision comparison vacuous.
           let strategy: Snapshotting<UIView, UIImage> = .image(
-            precision: 0.9, traits: .init(userInterfaceStyle: .light))
+            precision: 0.9, traits: visionOSLightTraits)
           label.text = "Hello."
           assertSnapshot(of: label, as: strategy, named: platform)
           label.text = "Hello"
@@ -372,7 +379,9 @@ final class SnapshotTestingTests: BaseTestCase {
         // full-width rows at a smaller width (verified empirically at 480 pt), so extra
         // window-size variants would add fixtures without adding coverage.
         assertSnapshot(
-          of: tableViewController, as: .image(on: .visionOSWindow), named: "visionos")
+          of: tableViewController,
+          as: .image(on: .visionOSWindow, traits: visionOSLightTraits),
+          named: "visionos")
       #else
         assertSnapshot(of: tableViewController, as: .image(on: .iPhoneSe))
       #endif
@@ -408,12 +417,9 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshots(
           of: tableViewController,
           as: [
-            "window-visionos": .image(on: .visionOSWindow),
-            // visionOS resolves dynamic colors as dark appearance by default, which would
-            // render the cell text white on a clear background. Pin light appearance like
-            // the `visionOSWindow` config does.
+            "window-visionos": .image(on: .visionOSWindow, traits: visionOSLightTraits),
             "fixed-visionos": .image(
-              size: .init(width: 640, height: 480), traits: .init(userInterfaceStyle: .light)),
+              size: .init(width: 640, height: 480), traits: visionOSLightTraits),
           ])
       #else
         assertSnapshots(
@@ -714,9 +720,12 @@ final class SnapshotTestingTests: BaseTestCase {
           // window therefore exercises layout at a different aspect ratio, not a size-class
           // change.
           assertSnapshot(
-            of: viewController, as: .image(on: .visionOSWindow), named: "visionos-window")
+            of: viewController,
+            as: .image(on: .visionOSWindow, traits: visionOSLightTraits),
+            named: "visionos-window")
           assertSnapshot(
-            of: viewController, as: .image(on: .visionOSWindow(width: 640, height: 720)),
+            of: viewController,
+            as: .image(on: .visionOSWindow(width: 640, height: 720), traits: visionOSLightTraits),
             named: "visionos-window-640x720")
           assertSnapshot(
             of: viewController, as: .recursiveDescription(on: .visionOSWindow),
@@ -726,7 +735,10 @@ final class SnapshotTestingTests: BaseTestCase {
             assertSnapshot(
               of: viewController,
               as: .image(
-                on: .visionOSWindow, traits: .init(preferredContentSizeCategory: contentSize)),
+                on: .visionOSWindow,
+                traits: .init(traitsFrom: [
+                  visionOSLightTraits, .init(preferredContentSizeCategory: contentSize),
+                ])),
               named: "visionos-window-\(name)"
             )
           }
@@ -827,7 +839,9 @@ final class SnapshotTestingTests: BaseTestCase {
           // visionOS has no fixed device screens or orientations, so snapshot the tab/nav
           // hierarchy in the single window preset instead of the iPhone/iPad matrix.
           assertSnapshot(
-            of: viewController, as: .image(on: .visionOSWindow), named: "visionos-window")
+            of: viewController,
+            as: .image(on: .visionOSWindow, traits: visionOSLightTraits),
+            named: "visionos-window")
         #else
           assertSnapshot(of: viewController, as: .image(on: .iPhoneSe), named: "iphone-se")
           assertSnapshot(of: viewController, as: .image(on: .iPhone8), named: "iphone-8")
@@ -989,9 +1003,11 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshots(
           of: viewController,
           as: [
-            "visionos-window-640x720": .image(on: .visionOSWindow(width: 640, height: 720)),
-            "visionos-window-1280x720": .image(on: .visionOSWindow),
-            "visionos-window-1920x1080": .image(on: .visionOSWindow(width: 1920, height: 1080)),
+            "visionos-window-640x720": .image(
+              on: .visionOSWindow(width: 640, height: 720), traits: visionOSLightTraits),
+            "visionos-window-1280x720": .image(on: .visionOSWindow, traits: visionOSLightTraits),
+            "visionos-window-1920x1080": .image(
+              on: .visionOSWindow(width: 1920, height: 1080), traits: visionOSLightTraits),
           ])
       #else
         assertSnapshots(
@@ -1017,12 +1033,9 @@ final class SnapshotTestingTests: BaseTestCase {
         allContentSizes.forEach { name, contentSize in
           #if os(visionOS)
             let fixtureName = "label-\(name)-visionos"
-            // visionOS resolves dynamic colors as dark appearance by default, which would
-            // render the label text white on a clear background. Pin light appearance like
-            // the `visionOSWindow` config does.
             let traits = UITraitCollection(traitsFrom: [
               .init(preferredContentSizeCategory: contentSize),
-              .init(userInterfaceStyle: .light),
+              visionOSLightTraits,
             ])
           #else
             let fixtureName = "label-\(name)"
@@ -1547,7 +1560,9 @@ final class SnapshotTestingTests: BaseTestCase {
       assertSnapshot(
         of: view, as: .image(layout: .fixed(width: 300.0, height: 100.0)), named: "fixed")
       assertSnapshot(
-        of: view, as: .image(layout: .device(config: .visionOSWindow)), named: "device")
+        of: view,
+        as: .image(layout: .device(config: .visionOSWindow), traits: visionOSLightTraits),
+        named: "device")
     }
   #endif
 }

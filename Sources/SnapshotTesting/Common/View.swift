@@ -513,17 +513,16 @@
         /// point size can be a valid window geometry.
         /// https://developer.apple.com/design/human-interface-guidelines/windows#visionOS
         /// https://developer.apple.com/documentation/visionOS/positioning-and-sizing-windows
+        /// - Note: Like the iOS and tvOS presets, this config describes only geometry and
+        ///   scale. visionOS resolves dynamic colors as dark appearance by default, which
+        ///   renders `.label` text white and `.systemBackground` clear; pass
+        ///   `traits: .init(userInterfaceStyle:)` at the snapshot call site to pin an
+        ///   explicit appearance.
         public static func visionOSWindow(width: CGFloat, height: CGFloat) -> ViewImageConfig {
           return .init(
             safeArea: .zero,
             size: .init(width: width, height: height),
-            // visionOS resolves dynamic colors as dark appearance by default, which renders
-            // `.label` text white and `.systemBackground` clear. Pin light appearance so
-            // snapshots resolve the same dynamic colors as the iOS device configs.
-            traits: .init(traitsFrom: [
-              .init(displayScale: 2),
-              .init(userInterfaceStyle: .light),
-            ])
+            traits: .init(displayScale: 2)
           )
         }
       #endif
