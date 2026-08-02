@@ -24,10 +24,15 @@
         imageScale = scale
       } else {
         #if os(visionOS)
-          // visionOS has no UIScreen. Content rasterizes at a default @2x scale factor
-          // unless a layer opts in to dynamic content scaling, which doesn't apply to
-          // offscreen rendering. See "Drawing sharp layer-based content in visionOS":
+          // visionOS has no UIScreen, so there is no screen scale to fall back on. Content
+          // rasterizes at a default @2x scale factor unless a layer opts in to dynamic content
+          // scaling, which doesn't apply to offscreen rendering. See "Drawing sharp layer-based
+          // content in visionOS":
           // https://developer.apple.com/documentation/visionos/drawing-sharp-layer-based-content
+          //
+          // NB: This is only the scale the reference is *decoded* at. The reference is re-tagged
+          //     with the newly-taken snapshot's scale below, so failure messages report point
+          //     sizes in the snapshot's own scale rather than always assuming @2x.
           imageScale = 2.0
         #else
           imageScale = UIScreen.main.scale
@@ -38,6 +43,12 @@
         toData: toData,
         fromData: { UIImage(data: $0, scale: imageScale)! }
       ) { old, new in
+        #if os(visionOS)
+          // Without a screen scale, the reference was decoded at a fixed default scale. Re-tag it
+          // with the newly-taken snapshot's scale so both images describe their (identical) pixel
+          // buffers in the same point space. An explicitly requested scale always wins.
+          let old = scale == nil || scale == 0.0 ? rescaled(old, to: new.scale) : old
+        #endif
         guard
           let message = compare(
             old, new, precision: precision, perceptualPrecision: perceptualPrecision)
@@ -56,6 +67,15 @@
         )
       }
     }
+
+    #if os(visionOS)
+      /// Re-tags an image with a different scale, leaving its pixel buffer untouched. Used to
+      /// describe a reference image in the same point space as the newly-taken snapshot.
+      private static func rescaled(_ image: UIImage, to scale: CGFloat) -> UIImage {
+        guard let cgImage = image.cgImage, scale > 0, scale != image.scale else { return image }
+        return UIImage(cgImage: cgImage, scale: scale, orientation: image.imageOrientation)
+      }
+    #endif
 
     /// Used when the image size has no width or no height to generated the default empty image
     private static func emptyImage() -> UIImage {
