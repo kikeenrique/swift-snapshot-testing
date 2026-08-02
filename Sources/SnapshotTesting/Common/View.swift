@@ -862,30 +862,28 @@
     /// renderer would otherwise inherit from the environment.
     private let webContentSnapshotScale: CGFloat = 2
 
-    /// Resolves once the web content process has painted a frame, by waiting for two animation
-    /// frames inside the page.
+    /// Resolves once the page has painted a frame.
     ///
-    /// Waiting happens twice. Messages to the content process are handled in order, so a wait
-    /// is only guaranteed to observe script that was submitted before it — and the snapshot
-    /// starts from the `isLoading` observer, which fires before `webView(_:didFinish:)` gives a
-    /// navigation delegate the chance to change the page. The first wait spans several frames
-    /// of real time, by which point any such script has been submitted, so the second one
-    /// resolves after it has been applied and painted.
+    /// Rendering the layer copies whatever the web content process last committed, and that
+    /// process paints on its own schedule: loading finishing means the DOM is complete, not
+    /// that anything has been drawn, so rendering immediately can capture a blank page. Asking
+    /// the page for a frame is the only signal available, because the API that reports
+    /// readiness directly, `takeSnapshot`, returns transparent images on visionOS.
+    ///
+    /// Two animation frames rather than one: a `requestAnimationFrame` callback runs *before*
+    /// the frame it belongs to is painted, so only the nested one proves a frame went out.
     private func waitForRenderedWebContent(
       of webView: WKWebView, completion: @escaping () -> Void
     ) {
-      func waitForFrame(then next: @escaping () -> Void) {
-        webView.callAsyncJavaScript(
-          """
-          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-          """,
-          in: nil,
-          in: .page
-        ) { _ in
-          next()
-        }
+      webView.callAsyncJavaScript(
+        """
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        """,
+        in: nil,
+        in: .page
+      ) { _ in
+        completion()
       }
-      waitForFrame { waitForFrame(then: completion) }
     }
 
     private func renderWebContent(of webView: WKWebView) -> UIImage {
