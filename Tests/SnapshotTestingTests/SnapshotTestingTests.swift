@@ -28,6 +28,15 @@ import XCTest
   private let visionOSLightTraits = UITraitCollection(userInterfaceStyle: .light)
 #endif
 
+// Timeout for the web view assertions. On visionOS the generous value absorbs the one-off WebKit
+// content process startup, which can exceed the default 5 seconds on a cold simulator. Every
+// other platform keeps the default so a hung web view fails fast.
+#if os(visionOS)
+  private let webViewTimeout: TimeInterval = 30
+#else
+  private let webViewTimeout: TimeInterval = 5
+#endif
+
 final class SnapshotTestingTests: BaseTestCase {
   func testAny() {
     struct User { let id: Int, name: String, bio: String }
@@ -1343,13 +1352,11 @@ final class SnapshotTestingTests: BaseTestCase {
       let webView = WKWebView()
       webView.loadHTMLString(html, baseURL: nil)
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        // NB: The generous timeout absorbs the one-off WebKit content process startup,
-        //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: webView,
           as: .image(size: .init(width: 800, height: 600)),
           named: platform,
-          timeout: 30
+          timeout: webViewTimeout
         )
       }
     #endif
@@ -1409,13 +1416,11 @@ final class SnapshotTestingTests: BaseTestCase {
         #else
           let traits = UITraitCollection()
         #endif
-        // NB: The generous timeout absorbs the one-off WebKit content process startup,
-        //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: stackView,
           as: .image(size: .init(width: 800, height: 600), traits: traits),
           named: platform,
-          timeout: 30
+          timeout: webViewTimeout
         )
       }
     #endif
@@ -1438,13 +1443,11 @@ final class SnapshotTestingTests: BaseTestCase {
       let html = try String(contentsOf: fixtureUrl)
       webView.loadHTMLString(html, baseURL: nil)
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        // NB: The generous timeout absorbs the one-off WebKit content process startup,
-        //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: webView,
           as: .image(size: .init(width: 800, height: 600)),
           named: platform,
-          timeout: 30
+          timeout: webViewTimeout
         )
       }
       _ = manipulatingWKWebViewNavigationDelegate
@@ -1471,13 +1474,11 @@ final class SnapshotTestingTests: BaseTestCase {
       let html = try String(contentsOf: fixtureUrl)
       webView.loadHTMLString(html, baseURL: nil)
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        // NB: The generous timeout absorbs the one-off WebKit content process startup,
-        //     which can exceed the default 5 seconds on a cold simulator.
         assertSnapshot(
           of: webView,
           as: .image(size: .init(width: 800, height: 600)),
           named: platform,
-          timeout: 30
+          timeout: webViewTimeout
         )
       }
       _ = cancellingWKWebViewNavigationDelegate
