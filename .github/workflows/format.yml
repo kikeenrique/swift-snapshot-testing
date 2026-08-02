@@ -3,7 +3,7 @@ name: Format
 on:
   push:
     branches:
-      - main
+      - "**"
 
 concurrency:
   group: format-${{ github.ref }}
@@ -27,6 +27,5 @@ jobs:
       - uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: Run swift-format
-          branch: 'main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

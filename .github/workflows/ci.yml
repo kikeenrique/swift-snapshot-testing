@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches:
-      - main
+      # NB: All branches while this fork iterates without an upstream PR; restrict to main when
+      #     the PR is cut, or every PR commit runs the matrix twice (push + pull_request).
+      - "**"
   pull_request:
     branches:
       - "**"
