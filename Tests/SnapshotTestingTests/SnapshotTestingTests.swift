@@ -1186,20 +1186,16 @@ final class SnapshotTestingTests: BaseTestCase {
       let viewWillAppearExpectation = expectation(description: "viewWillAppear")
       let viewDidAppearExpectation = expectation(description: "viewDidAppear")
       let viewWillDisappearExpectation = expectation(description: "viewWillDisappear")
-      #if os(visionOS)
-        // Created directly (not via `expectation(description:)`) so the test is not failed for
-        // never waiting on it: viewDidDisappear is not delivered on visionOS (see below).
-        let viewDidDisappearExpectation = XCTestExpectation(description: "viewDidDisappear")
-      #else
-        let viewDidDisappearExpectation = expectation(description: "viewDidDisappear")
-      #endif
+      let viewDidDisappearExpectation = expectation(description: "viewDidDisappear")
       viewWillAppearExpectation.expectedFulfillmentCount = 4
       viewDidAppearExpectation.expectedFulfillmentCount = 4
       #if os(visionOS)
         // The visionOS window teardown after each snapshot delivers viewWillDisappear once per
-        // snapshot (instead of twice on iOS) and never completes the disappearance transition,
-        // so viewDidDisappear is not delivered at all.
+        // snapshot (instead of twice on iOS) and never completes the disappearance transition.
         viewWillDisappearExpectation.expectedFulfillmentCount = 2
+        // The visionOS simulator does not deliver viewDidDisappear during window teardown, so the
+        // expectation is inverted rather than dropped from the wait below.
+        viewDidDisappearExpectation.isInverted = true
       #else
         viewWillDisappearExpectation.expectedFulfillmentCount = 4
         viewDidDisappearExpectation.expectedFulfillmentCount = 4
@@ -1221,24 +1217,14 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(of: viewController, as: .image)
       #endif
 
-      #if os(visionOS)
-        wait(
-          for: [
-            viewDidLoadExpectation,
-            viewWillAppearExpectation,
-            viewDidAppearExpectation,
-            viewWillDisappearExpectation,
-          ], timeout: 1.0, enforceOrder: true)
-      #else
-        wait(
-          for: [
-            viewDidLoadExpectation,
-            viewWillAppearExpectation,
-            viewDidAppearExpectation,
-            viewWillDisappearExpectation,
-            viewDidDisappearExpectation,
-          ], timeout: 1.0, enforceOrder: true)
-      #endif
+      wait(
+        for: [
+          viewDidLoadExpectation,
+          viewWillAppearExpectation,
+          viewDidAppearExpectation,
+          viewWillDisappearExpectation,
+          viewDidDisappearExpectation,
+        ], timeout: 1.0, enforceOrder: true)
     #endif
   }
 
