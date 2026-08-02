@@ -25,6 +25,21 @@ jobs:
       - name: Run tests
         run: make test-swift
 
+  visionos:
+    strategy:
+      matrix:
+        xcode:
+          - '16.4'
+
+    name: visionOS
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+      - name: Run tests
+        run: make test-visionos
+
   ubuntu:
     strategy:
       matrix:
