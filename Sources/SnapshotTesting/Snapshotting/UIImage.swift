@@ -227,65 +227,13 @@
       let pngData = new.pngData(),
       let newCgImage = UIImage(data: pngData)?.cgImage,
       oldCgImage.width == newCgImage.width,
-      oldCgImage.height == newCgImage.height
+      oldCgImage.height == newCgImage.height,
+      let oldData = oldCgImage.dataProvider?.data,
+      let newData = newCgImage.dataProvider?.data
     else {
       return nil
     }
 
-    guard var diffPlane = componentDiffPlane(oldCgImage, newCgImage) else { return nil }
-
-    guard
-      let outputCgImage = normalizedGrayscaleImage(
-        fromPlane: &diffPlane,
-        width: oldCgImage.width,
-        height: oldCgImage.height
-      )
-    else {
-      return nil
-    }
-
-    return UIImage(cgImage: outputCgImage, scale: old.scale, orientation: .up)
-  }
-
-  /// Computes a planar-8 buffer where each byte is the largest per-channel difference between the
-  /// corresponding pixels of the two images.
-  private func componentDiffPlane(_ old: CGImage, _ new: CGImage) -> [UInt8]? {
-    guard let oldData = old.dataProvider?.data,
-      let newData = new.dataProvider?.data
-    else {
-      return nil
-    }
-
-    let pixelCount = old.width * old.height
-    let oldBytes = CFDataGetBytePtr(oldData)!
-    let newBytes = CFDataGetBytePtr(newData)!
-    var diffBytes = [UInt8](repeating: 0, count: pixelCount)
-
-    // NB: We are purposely using a verbose 'while' loop instead of a 'for in' loop.  When the
-    //     compiler doesn't have optimizations enabled, like in test targets, a `while` loop is
-    //     significantly faster than a `for` loop for iterating through the elements of a memory
-    //     buffer. Details can be found in [SR-6983](https://github.com/apple/swift/issues/49531)
-    var index = 0
-    while index < pixelCount {
-      defer { index += 1 }
-      let pixelOffset = index * imageContextBytesPerPixel
-
-      let rDiff = abs(Int16(oldBytes[pixelOffset]) - Int16(newBytes[pixelOffset]))
-      let gDiff = abs(Int16(oldBytes[pixelOffset + 1]) - Int16(newBytes[pixelOffset + 1]))
-      let bDiff = abs(Int16(oldBytes[pixelOffset + 2]) - Int16(newBytes[pixelOffset + 2]))
-      let aDiff = abs(Int16(oldBytes[pixelOffset + 3]) - Int16(newBytes[pixelOffset + 3]))
-
-      diffBytes[index] = UInt8(max(rDiff, gDiff, bDiff, aDiff))
-    }
-
-    return diffBytes
-  }
-
-  /// Contrast-stretches a planar-8 diff buffer so faint differences become visible and renders it
-  /// as a linear-gray image. Falls back to the unstretched buffer if stretching fails.
-  private func normalizedGrayscaleImage(
-    fromPlane diffBytes: inout [UInt8], width: Int, height: Int
-  ) -> CGImage? {
     guard let outputColorSpace = CGColorSpace(name: CGColorSpace.linearGray),
       let outputFormat = vImage_CGImageFormat(
         bitsPerComponent: imageContextBitsPerComponent,
@@ -297,7 +245,40 @@
       return nil
     }
 
-    return diffBytes.withUnsafeMutableBytes { diffPtr in
+    let width = oldCgImage.width
+    let height = oldCgImage.height
+    let pixelCount = width * height
+    let scale = old.scale
+
+    let oldBytes = CFDataGetBytePtr(oldData)!
+    let newBytes = CFDataGetBytePtr(newData)!
+    var diffBytes = [UInt8](repeating: 0, count: pixelCount)
+
+    var index = 0
+    while index < pixelCount {
+      defer { index += 1 }
+      let pixelOffset = index * imageContextBytesPerPixel
+
+      let rOld = Int16(oldBytes[pixelOffset])
+      let gOld = Int16(oldBytes[pixelOffset + 1])
+      let bOld = Int16(oldBytes[pixelOffset + 2])
+      let aOld = Int16(oldBytes[pixelOffset + 3])
+
+      let rNew = Int16(newBytes[pixelOffset])
+      let gNew = Int16(newBytes[pixelOffset + 1])
+      let bNew = Int16(newBytes[pixelOffset + 2])
+      let aNew = Int16(newBytes[pixelOffset + 3])
+
+      let rDiff = abs(rOld - rNew)
+      let gDiff = abs(gOld - gNew)
+      let bDiff = abs(bOld - bNew)
+      let aDiff = abs(aOld - aNew)
+
+      let maxDiff = max(rDiff, gDiff, bDiff, aDiff)
+      diffBytes[index] = UInt8(maxDiff)
+    }
+
+    let outputCgImage: CGImage? = diffBytes.withUnsafeMutableBytes { diffPtr in
       var diffBuffer = vImage_Buffer(
         data: diffPtr.baseAddress,
         height: vImagePixelCount(height),
@@ -326,6 +307,10 @@
         return nil
       }
     }
+
+    guard let outputCgImage else { return nil }
+
+    return UIImage(cgImage: outputCgImage, scale: scale, orientation: .up)
   }
 #endif
 
