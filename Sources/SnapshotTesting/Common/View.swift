@@ -7,7 +7,7 @@
   #if os(iOS) || os(tvOS) || os(visionOS)
     import UIKit
   #endif
-  #if os(iOS) || os(macOS)
+  #if os(iOS) || os(macOS) || os(visionOS)
     import WebKit
   #endif
 
@@ -513,6 +513,11 @@
         /// point size can be a valid window geometry.
         /// https://developer.apple.com/design/human-interface-guidelines/windows#visionOS
         /// https://developer.apple.com/documentation/visionOS/positioning-and-sizing-windows
+        /// - Note: Like the iOS and tvOS presets, this config describes only geometry and
+        ///   scale. visionOS resolves dynamic colors as dark appearance by default, which
+        ///   renders `.label` text white and `.systemBackground` clear; pass
+        ///   `traits: .init(userInterfaceStyle:)` at the snapshot call site to pin an
+        ///   explicit appearance.
         public static func visionOSWindow(width: CGFloat, height: CGFloat) -> ViewImageConfig {
           return .init(
             safeArea: .zero,
@@ -851,6 +856,46 @@
       ?? view.subviews.flatMap(addImagesForRenderedViews)
   }
 
+  #if os(visionOS)
+    /// visionOS renders at 2x, matching `ViewImageConfig.visionOSWindow`. Pinning the scale
+    /// keeps the snapshot's pixel dimensions independent of whatever display scale the
+    /// renderer would otherwise inherit from the environment.
+    private let webContentSnapshotScale: CGFloat = 2
+
+    /// Resolves once the page has painted a frame.
+    ///
+    /// Rendering the layer copies whatever the web content process last committed, and that
+    /// process paints on its own schedule: loading finishing means the DOM is complete, not
+    /// that anything has been drawn, so rendering immediately can capture a blank page. Asking
+    /// the page for a frame is the only signal available, because the API that reports
+    /// readiness directly, `takeSnapshot`, returns transparent images on visionOS.
+    ///
+    /// Two animation frames rather than one: a `requestAnimationFrame` callback runs *before*
+    /// the frame it belongs to is painted, so only the nested one proves a frame went out.
+    private func waitForRenderedWebContent(
+      of webView: WKWebView, completion: @escaping () -> Void
+    ) {
+      webView.callAsyncJavaScript(
+        """
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        """,
+        in: nil,
+        in: .page
+      ) { _ in
+        completion()
+      }
+    }
+
+    private func renderWebContent(of webView: WKWebView) -> UIImage {
+      let format = UIGraphicsImageRendererFormat.preferred()
+      format.scale = webContentSnapshotScale
+      return UIGraphicsImageRenderer(bounds: webView.bounds, format: format).image {
+        rendererContext in
+        webView.layer.render(in: rendererContext.cgContext)
+      }
+    }
+  #endif
+
   extension View {
     var snapshot: Async<Image>? {
       func inWindow<T>(_ perform: () -> T) -> T {
@@ -879,7 +924,7 @@
           fatalError("Taking SKView snapshots requires macOS 10.11 or greater")
         }
       }
-      #if os(iOS) || os(macOS)
+      #if os(iOS) || os(macOS) || os(visionOS)
         if let wkWebView = self as? WKWebView {
           return Async<Image> { callback in
             let work = {
@@ -889,13 +934,25 @@
                     callback(Image())
                     return
                   }
-                  let configuration = WKSnapshotConfiguration()
-                  if #available(iOS 13, macOS 10.15, *) {
-                    configuration.afterScreenUpdates = false
-                  }
-                  wkWebView.takeSnapshot(with: configuration) { image, _ in
-                    callback(image!)
-                  }
+                  #if os(visionOS)
+                    // On visionOS, WKWebView.takeSnapshot returns a fully transparent image
+                    // even for loaded, JavaScript-responsive content, while rendering the
+                    // layer captures the page correctly — the opposite of iOS/macOS, where
+                    // out-of-process web content is only available via takeSnapshot. Loading
+                    // finishing does not mean the content process has painted, so wait for a
+                    // frame from the page itself before rendering its layer.
+                    waitForRenderedWebContent(of: wkWebView) {
+                      callback(renderWebContent(of: wkWebView))
+                    }
+                  #else
+                    let configuration = WKSnapshotConfiguration()
+                    if #available(iOS 13, macOS 10.15, *) {
+                      configuration.afterScreenUpdates = false
+                    }
+                    wkWebView.takeSnapshot(with: configuration) { image, _ in
+                      callback(image!)
+                    }
+                  #endif
                 }
               } else {
                 #if os(iOS)
@@ -910,9 +967,12 @@
               var subscription: NSKeyValueObservation?
               subscription = wkWebView.observe(\.isLoading, options: [.initial, .new]) {
                 (webview, change) in
-                subscription?.invalidate()
-                subscription = nil
+                // NB: Keep observing until loading actually finishes. The observer also
+                //     fires immediately (`.initial`) with `isLoading == true`; tearing it
+                //     down on that first event would leave the snapshot waiting forever.
                 if change.newValue == false {
+                  subscription?.invalidate()
+                  subscription = nil
                   work()
                 }
               }
@@ -1098,7 +1158,16 @@
     private func getKeyWindow() -> UIWindow? {
       var window: UIWindow?
       #if os(visionOS)
-        window = UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
+        // 'UIApplication.windows' is deprecated on visionOS and documented to be empty
+        // for scene-based apps, so resolve the key window through the connected scenes
+        // and only fall back to the flat list.
+        let windowScenes =
+          UIApplication.sharedIfAvailable?.connectedScenes.compactMap { $0 as? UIWindowScene }
+          ?? []
+        window =
+          windowScenes.compactMap(\.keyWindow).first
+          ?? windowScenes.flatMap(\.windows).first { $0.isKeyWindow }
+          ?? UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
       #else
         if #available(iOS 13.0, *) {
           window = UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }

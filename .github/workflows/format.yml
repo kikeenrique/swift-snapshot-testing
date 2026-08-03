@@ -3,7 +3,7 @@ name: Format
 on:
   push:
     branches:
-      - "*"
+      - "**"
 
 concurrency:
   group: format-${{ github.ref }}

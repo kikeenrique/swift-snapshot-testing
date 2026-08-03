@@ -453,12 +453,23 @@ public func verifySnapshot<Value, Format>(
       let reference = snapshotting.diffing.fromData(data)
 
       #if os(iOS) || os(tvOS) || os(visionOS)
-        // If the image generation fails for the diffable part and the reference was empty, use the reference
+        // If the image generation failed for the diffable part, the newly-taken snapshot is an
+        // image with a zero width and/or height. Recording such a snapshot writes the library's
+        // "no image could be generated" placeholder to disk (see 'Diffing.image's 'toData'), so
+        // when the reference on disk is that same placeholder there is nothing meaningful left to
+        // compare and the reference is reused. A reference recorded from a real view is left
+        // alone so that the comparison still fails.
         if let localDiff = diffable as? UIImage,
           let refImage = reference as? UIImage,
-          localDiff.size == .zero && refImage.size == .zero
+          localDiff.size.width == 0 || localDiff.size.height == 0
         {
-          diffable = reference
+          // Round-tripping the zero-sized snapshot through the diffing strategy yields the
+          // placeholder, which avoids hard-coding its size here.
+          let placeholder =
+            snapshotting.diffing.fromData(snapshotting.diffing.toData(diffable)) as? UIImage
+          if refImage.size == .zero || refImage.size == placeholder?.size {
+            diffable = reference
+          }
         }
       #endif
 

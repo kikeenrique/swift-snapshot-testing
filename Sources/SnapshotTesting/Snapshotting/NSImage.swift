@@ -25,11 +25,9 @@
             old, new, precision: precision, perceptualPrecision: perceptualPrecision)
         else { return nil }
         let difference = SnapshotTesting.diff(old, new)
-        let oldAttachment = DiffAttachment.data(
-          NSImagePNGRepresentation(old)!, name: "reference.png")
+        let oldAttachment = DiffAttachment.data(NSImagePNGRepresentation(old)!, name: "reference.png")
         let newAttachment = DiffAttachment.data(NSImagePNGRepresentation(new)!, name: "failure.png")
-        let differenceAttachment = DiffAttachment.data(
-          NSImagePNGRepresentation(difference)!, name: "difference.png")
+        let differenceAttachment = DiffAttachment.data(NSImagePNGRepresentation(difference)!, name: "difference.png")
         return (
           message,
           [oldAttachment, newAttachment, differenceAttachment]
