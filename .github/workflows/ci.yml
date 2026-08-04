@@ -22,8 +22,28 @@ jobs:
       - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.xcode }}
         run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+      # Run through xcodebuild rather than `swift test`: only xcodebuild collects the
+      # reference/failure/difference image attachments, so a red run is diagnosable from the
+      # uploaded bundle instead of a bare "Snapshot does not match".
       - name: Run tests
-        run: make test-swift
+        env:
+          # xcodebuild does not forward the job environment to the test process — unlike
+          # `swift test`, which is how the machine-dependent macOS asserts have been skipping on
+          # CI. The TEST_RUNNER_ prefix is passed through with the prefix stripped, preserving
+          # that behavior; without it those asserts run here and fail.
+          TEST_RUNNER_GITHUB_WORKFLOW: ${{ github.workflow }}
+        run: make test-macos RESULT_BUNDLE=TestResults.xcresult
+      # The suite records on failure, so the checked-out references are overwritten by the CI
+      # render before the job ends. The attachments are built from in-memory data beforehand, so
+      # the bundle keeps the real diff; the __Snapshots__ copy is what CI actually rendered.
+      - name: Upload result bundle and CI-rendered snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-xcresult
+          path: |
+            TestResults.xcresult
+            Tests/SnapshotTestingTests/__Snapshots__
 
   ubuntu:
     strategy:
