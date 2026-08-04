@@ -37,7 +37,8 @@ test-visionos:
 	set -o pipefail && \
 	xcodebuild test \
 		-scheme swift-snapshot-testing-Package \
-		-destination platform="visionOS Simulator,name=Apple Vision Pro (at 2732x2048),OS=2.5"
+		-destination platform="visionOS Simulator,name=Apple Vision Pro (at 2732x2048),OS=2.5" \
+		$(RESULT_BUNDLE_FLAG)
 
 format:
 	swift format \

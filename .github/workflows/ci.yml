@@ -59,8 +59,19 @@ jobs:
       - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.xcode }}
         run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+      # No TEST_RUNNER_GITHUB_WORKFLOW here on purpose: this job has always run without the guard
+      # reaching the test process, so the guarded asserts do execute on visionOS and pass against
+      # simulator-canonical references. Forwarding it would silently skip them.
       - name: Run tests
-        run: make test-visionos
+        run: make test-visionos RESULT_BUNDLE=TestResults.xcresult
+      - name: Upload result bundle and CI-rendered snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visionos-xcresult
+          path: |
+            TestResults.xcresult
+            Tests/SnapshotTestingTests/__Snapshots__
 
   ubuntu:
     strategy:
