@@ -1,3 +1,8 @@
+# Optional result bundle: `make test-macos RESULT_BUNDLE=TestResults.xcresult`. Snapshot
+# reference/failure/difference images are attached to the bundle, and only xcodebuild emits them —
+# `swift test` reports a bare "does not match". CI uploads the bundle when a run goes red.
+RESULT_BUNDLE_FLAG = $(if $(RESULT_BUNDLE),-resultBundlePath $(RESULT_BUNDLE))
+
 test-linux:
 	docker run \
 		--rm \
@@ -9,8 +14,9 @@ test-linux:
 test-macos:
 	set -o pipefail && \
 	xcodebuild test \
-		-scheme SnapshotTesting \
+		-scheme swift-snapshot-testing-Package \
 		-destination platform="macOS" \
+		$(RESULT_BUNDLE_FLAG)
 
 test-ios:
 	set -o pipefail && \
@@ -31,7 +37,8 @@ test-visionos:
 	set -o pipefail && \
 	xcodebuild test \
 		-scheme swift-snapshot-testing-Package \
-		-destination platform="visionOS Simulator,name=Apple Vision Pro (at 2732x2048),OS=2.5"
+		-destination platform="visionOS Simulator,name=Apple Vision Pro (at 2732x2048),OS=2.5" \
+		$(RESULT_BUNDLE_FLAG)
 
 format:
 	swift format \
