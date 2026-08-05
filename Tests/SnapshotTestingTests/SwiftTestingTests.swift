@@ -31,11 +31,7 @@
       }
 
       #if canImport(UIKit)
-        @Test(
-          .enabled {
-            !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW")
-          }
-        )
+        @Test
         func testUIImage() {
           let redPixel = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image {
             context in
@@ -59,11 +55,7 @@
       #endif
 
       #if canImport(AppKit)
-        @Test(
-          .enabled {
-            !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW")
-          }
-        )
+        @Test
         func testNSImage() {
           let redPixel = NSImage(size: NSSize(width: 1, height: 1), flipped: false) { rect in
             NSColor.red.setFill()

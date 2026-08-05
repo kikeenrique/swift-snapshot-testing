@@ -127,15 +127,13 @@ final class SnapshotTestingTests: BaseTestCase {
         osName = "macOS"
       #endif
 
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        #if os(macOS)
-          // Pin scale so the reference is portable across recording hosts. Other platforms keep
-          // their existing references.
-          assertSnapshot(of: path, as: .image(scale: 2), named: osName)
-        #else
-          assertSnapshot(of: path, as: .image, named: osName)
-        #endif
-      }
+      #if os(macOS)
+        // Pin scale so the reference is portable across recording hosts. Other platforms keep
+        // their existing references.
+        assertSnapshot(of: path, as: .image(scale: 2), named: osName)
+      #else
+        assertSnapshot(of: path, as: .image, named: osName)
+      #endif
 
       if #available(iOS 11.0, OSX 10.13, tvOS 11.0, *) {
         assertSnapshot(of: path, as: .elementsDescription, named: osName)
@@ -198,9 +196,7 @@ final class SnapshotTestingTests: BaseTestCase {
     #if os(macOS)
       let path = NSBezierPath.heart
 
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(of: path, as: .image(scale: 2), named: "macOS")
-      }
+      assertSnapshot(of: path, as: .image(scale: 2), named: "macOS")
 
       assertSnapshot(of: path, as: .elementsDescription, named: "macOS")
     #endif
@@ -212,12 +208,10 @@ final class SnapshotTestingTests: BaseTestCase {
       button.bezelStyle = .rounded
       button.title = "Push Me"
       button.sizeToFit()
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        // Text glyph antialiasing differs across macOS point releases, so allow a small
-        // perceptual tolerance on top of the pinned scale.
-        assertSnapshot(of: button, as: .image(perceptualPrecision: 0.98, scale: 2))
-        assertSnapshot(of: button, as: .recursiveDescription)
-      }
+      // Text glyph antialiasing differs across macOS point releases, so allow a small
+      // perceptual tolerance on top of the pinned scale.
+      assertSnapshot(of: button, as: .image(perceptualPrecision: 0.98, scale: 2))
+      assertSnapshot(of: button, as: .recursiveDescription)
     #endif
   }
 
@@ -228,13 +222,11 @@ final class SnapshotTestingTests: BaseTestCase {
       view.wantsLayer = true
       view.layer?.backgroundColor = NSColor.green.cgColor
       view.layer?.cornerRadius = 5
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(of: view, as: .image(scale: 2))
-        assertSnapshot(of: view, as: .recursiveDescription)
-        assertSnapshot(
-          of: view, as: .image(size: CGSize(width: 30.0, height: 10.0), scale: 2),
-          named: "size-override")
-      }
+      assertSnapshot(of: view, as: .image(scale: 2))
+      assertSnapshot(of: view, as: .recursiveDescription)
+      assertSnapshot(
+        of: view, as: .image(size: CGSize(width: 30.0, height: 10.0), scale: 2),
+        named: "size-override")
     #endif
   }
 
@@ -247,13 +239,11 @@ final class SnapshotTestingTests: BaseTestCase {
       view.layer?.backgroundColor = NSColor.orange.cgColor
       view.layer?.cornerRadius = 10
       viewController.view = view
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(of: viewController, as: .image(scale: 2))
-        assertSnapshot(of: viewController, as: .recursiveDescription)
-        assertSnapshot(
-          of: viewController, as: .image(size: CGSize(width: 40.0, height: 10.0), scale: 2),
-          named: "size-override")
-      }
+      assertSnapshot(of: viewController, as: .image(scale: 2))
+      assertSnapshot(of: viewController, as: .recursiveDescription)
+      assertSnapshot(
+        of: viewController, as: .image(size: CGSize(width: 40.0, height: 10.0), scale: 2),
+        named: "size-override")
     #endif
   }
 
@@ -268,19 +258,17 @@ final class SnapshotTestingTests: BaseTestCase {
         }
       }
       let view = AppearanceView(frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(
-          of: view, as: .image(appearance: NSAppearance(named: .aqua), scale: 2), named: "light")
-        assertSnapshot(
-          of: view, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2), named: "dark")
+      assertSnapshot(
+        of: view, as: .image(appearance: NSAppearance(named: .aqua), scale: 2), named: "light")
+      assertSnapshot(
+        of: view, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2), named: "dark")
 
-        let viewController = NSViewController()
-        viewController.view = AppearanceView(
-          frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
-        assertSnapshot(
-          of: viewController, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2),
-          named: "view-controller-dark")
-      }
+      let viewController = NSViewController()
+      viewController.view = AppearanceView(
+        frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
+      assertSnapshot(
+        of: viewController, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2),
+        named: "view-controller-dark")
     #endif
   }
 
@@ -291,12 +279,10 @@ final class SnapshotTestingTests: BaseTestCase {
       view.wantsLayer = true
       view.layer?.backgroundColor = NSColor.blue.cgColor
       view.layer?.cornerRadius = 5
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        // Pinned scales render machine-independently: 10 pt becomes 10 px at 1x, 20 px at 2x,
-        // regardless of the host display's backing scale.
-        assertSnapshot(of: view, as: .image(scale: 1), named: "1x")
-        assertSnapshot(of: view, as: .image(scale: 2), named: "2x")
-      }
+      // Pinned scales render machine-independently: 10 pt becomes 10 px at 1x, 20 px at 2x,
+      // regardless of the host display's backing scale.
+      assertSnapshot(of: view, as: .image(scale: 1), named: "1x")
+      assertSnapshot(of: view, as: .image(scale: 2), named: "2x")
     #endif
   }
 
@@ -416,12 +402,10 @@ final class SnapshotTestingTests: BaseTestCase {
         }
       }
       let controller = NSHostingController(rootView: MyView().background(Color.yellow))
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(
-          of: controller,
-          as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2)
-        )
-      }
+      assertSnapshot(
+        of: controller,
+        as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2)
+      )
     #endif
   }
 
@@ -442,24 +426,22 @@ final class SnapshotTestingTests: BaseTestCase {
         label.isBezeled = false
         label.isEditable = false
       #endif
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        label.text = "Hello."
-        #if os(macOS)
-          assertSnapshot(
-            of: label, as: .image(precision: 0.9, perceptualPrecision: 0.98, scale: 2),
-            named: platform)
-        #else
-          assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
-        #endif
-        label.text = "Hello"
-        #if os(macOS)
-          assertSnapshot(
-            of: label, as: .image(precision: 0.9, perceptualPrecision: 0.98, scale: 2),
-            named: platform)
-        #else
-          assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
-        #endif
-      }
+      label.text = "Hello."
+      #if os(macOS)
+        assertSnapshot(
+          of: label, as: .image(precision: 0.9, perceptualPrecision: 0.98, scale: 2),
+          named: platform)
+      #else
+        assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
+      #endif
+      label.text = "Hello"
+      #if os(macOS)
+        assertSnapshot(
+          of: label, as: .image(precision: 0.9, perceptualPrecision: 0.98, scale: 2),
+          named: platform)
+      #else
+        assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
+      #endif
     #endif
   }
 
@@ -1162,9 +1144,7 @@ final class SnapshotTestingTests: BaseTestCase {
         osName = "tvOS"
       #endif
 
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(of: path, as: .image, named: osName)
-      }
+      assertSnapshot(of: path, as: .image, named: osName)
 
       if #available(iOS 11.0, tvOS 11.0, *) {
         assertSnapshot(of: path, as: .elementsDescription, named: osName)
@@ -1271,9 +1251,7 @@ final class SnapshotTestingTests: BaseTestCase {
       #elseif os(macOS)
         layer.backgroundColor = NSColor.red.cgColor
         layer.borderColor = NSColor.black.cgColor
-        if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-          assertSnapshot(of: layer, as: .image(precision: 1, scale: 2), named: "macos")
-        }
+        assertSnapshot(of: layer, as: .image(precision: 1, scale: 2), named: "macos")
       #endif
     #endif
   }
@@ -1293,9 +1271,7 @@ final class SnapshotTestingTests: BaseTestCase {
       #if os(iOS)
         assertSnapshot(of: baseLayer, as: .image)
       #elseif os(macOS)
-        if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-          assertSnapshot(of: baseLayer, as: .image(precision: 1, scale: 2), named: "macos")
-        }
+        assertSnapshot(of: baseLayer, as: .image(precision: 1, scale: 2), named: "macos")
       #endif
     #endif
   }
@@ -1374,13 +1350,11 @@ final class SnapshotTestingTests: BaseTestCase {
       let html = try String(contentsOf: fixtureUrl)
       let webView = WKWebView()
       webView.loadHTMLString(html, baseURL: nil)
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(
-          of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
-          named: platform
-        )
-      }
+      assertSnapshot(
+        of: webView,
+        as: .image(size: .init(width: 800, height: 600)),
+        named: platform
+      )
     #endif
   }
 
@@ -1430,13 +1404,11 @@ final class SnapshotTestingTests: BaseTestCase {
       let stackView = UIStackView(arrangedSubviews: [label, webView])
       stackView.axis = .vertical
 
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(
-          of: stackView,
-          as: .image(size: .init(width: 800, height: 600)),
-          named: platform
-        )
-      }
+      assertSnapshot(
+        of: stackView,
+        as: .image(size: .init(width: 800, height: 600)),
+        named: platform
+      )
     #endif
   }
 
@@ -1456,13 +1428,11 @@ final class SnapshotTestingTests: BaseTestCase {
         .appendingPathComponent("__Fixtures__/pointfree.html")
       let html = try String(contentsOf: fixtureUrl)
       webView.loadHTMLString(html, baseURL: nil)
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(
-          of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
-          named: platform
-        )
-      }
+      assertSnapshot(
+        of: webView,
+        as: .image(size: .init(width: 800, height: 600)),
+        named: platform
+      )
       _ = manipulatingWKWebViewNavigationDelegate
     }
 
@@ -1486,13 +1456,11 @@ final class SnapshotTestingTests: BaseTestCase {
         .appendingPathComponent("__Fixtures__/pointfree.html")
       let html = try String(contentsOf: fixtureUrl)
       webView.loadHTMLString(html, baseURL: nil)
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(
-          of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
-          named: platform
-        )
-      }
+      assertSnapshot(
+        of: webView,
+        as: .image(size: .init(width: 800, height: 600)),
+        named: platform
+      )
       _ = cancellingWKWebViewNavigationDelegate
     }
   #endif
@@ -1569,32 +1537,30 @@ final class SnapshotTestingTests: BaseTestCase {
       }
       let view = MyView().background(Color.yellow)
 
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        // Text glyph antialiasing differs across macOS point releases, so allow a small
-        // perceptual tolerance on top of the pinned scale.
-        assertSnapshot(of: view, as: .image(perceptualPrecision: 0.98, scale: 2))
-        assertSnapshot(
-          of: view, as: .image(perceptualPrecision: 0.98, layout: .sizeThatFits, scale: 2),
-          named: "size-that-fits")
-        assertSnapshot(
-          of: view,
-          as: .image(
-            perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0), scale: 2),
-          named: "fixed")
+      // Text glyph antialiasing differs across macOS point releases, so allow a small
+      // perceptual tolerance on top of the pinned scale.
+      assertSnapshot(of: view, as: .image(perceptualPrecision: 0.98, scale: 2))
+      assertSnapshot(
+        of: view, as: .image(perceptualPrecision: 0.98, layout: .sizeThatFits, scale: 2),
+        named: "size-that-fits")
+      assertSnapshot(
+        of: view,
+        as: .image(
+          perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0), scale: 2),
+        named: "fixed")
 
-        // System colors resolve against the effective appearance, so the two renders must differ.
-        if #available(macOS 12.0, *) {
-          let appearanceView = MyView().background(Color(nsColor: .windowBackgroundColor))
-          assertSnapshot(
-            of: appearanceView,
-            as: .image(perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua), scale: 2),
-            named: "light")
-          assertSnapshot(
-            of: appearanceView,
-            as: .image(
-              perceptualPrecision: 0.98, appearance: NSAppearance(named: .darkAqua), scale: 2),
-            named: "dark")
-        }
+      // System colors resolve against the effective appearance, so the two renders must differ.
+      if #available(macOS 12.0, *) {
+        let appearanceView = MyView().background(Color(nsColor: .windowBackgroundColor))
+        assertSnapshot(
+          of: appearanceView,
+          as: .image(perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua), scale: 2),
+          named: "light")
+        assertSnapshot(
+          of: appearanceView,
+          as: .image(
+            perceptualPrecision: 0.98, appearance: NSAppearance(named: .darkAqua), scale: 2),
+          named: "dark")
       }
     }
   #endif

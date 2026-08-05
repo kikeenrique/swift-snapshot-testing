@@ -22,8 +22,22 @@ jobs:
       - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.xcode }}
         run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+      # xcodebuild rather than `swift test`: only xcodebuild collects the library's
+      # reference/failure/difference image attachments, so a red image assert is readable from the
+      # uploaded bundle instead of a bare "Snapshot does not match".
       - name: Run tests
-        run: make test-swift
+        run: make test-macos RESULT_BUNDLE=TestResults.xcresult
+      # record: .failed overwrites the checked-out references with the CI render before the job
+      # ends, so the uploaded __Snapshots__ tree is what this runner drew; the bundle's attachments
+      # are built beforehand and keep the original diff.
+      - name: Upload result bundle and CI-rendered snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-xcresult
+          path: |
+            TestResults.xcresult
+            Tests/SnapshotTestingTests/__Snapshots__
 
   ubuntu:
     strategy:
