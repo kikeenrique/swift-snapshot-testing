@@ -209,8 +209,12 @@ final class SnapshotTestingTests: BaseTestCase {
       button.title = "Push Me"
       button.sizeToFit()
       // Text glyph antialiasing differs across macOS point releases, so allow a small
-      // perceptual tolerance on top of the pinned scale.
-      assertSnapshot(of: button, as: .image(perceptualPrecision: 0.98, scale: 2))
+      // perceptual tolerance on top of the pinned scale. The appearance is pinned because an
+      // unpinned render follows the recording machine's system setting, which puts light text on
+      // a light control when recorded in dark mode.
+      assertSnapshot(
+        of: button,
+        as: .image(perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua), scale: 2))
       assertSnapshot(of: button, as: .recursiveDescription)
     #endif
   }
@@ -404,7 +408,9 @@ final class SnapshotTestingTests: BaseTestCase {
       let controller = NSHostingController(rootView: MyView().background(Color.yellow))
       assertSnapshot(
         of: controller,
-        as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2)
+        as: .image(
+          perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0),
+          appearance: NSAppearance(named: .aqua), scale: 2)
       )
     #endif
   }
@@ -429,7 +435,10 @@ final class SnapshotTestingTests: BaseTestCase {
       label.text = "Hello."
       #if os(macOS)
         assertSnapshot(
-          of: label, as: .image(precision: 0.9, perceptualPrecision: 0.98, scale: 2),
+          of: label,
+          as: .image(
+            precision: 0.9, perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua),
+            scale: 2),
           named: platform)
       #else
         assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
@@ -437,7 +446,10 @@ final class SnapshotTestingTests: BaseTestCase {
       label.text = "Hello"
       #if os(macOS)
         assertSnapshot(
-          of: label, as: .image(precision: 0.9, perceptualPrecision: 0.98, scale: 2),
+          of: label,
+          as: .image(
+            precision: 0.9, perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua),
+            scale: 2),
           named: platform)
       #else
         assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
@@ -1539,14 +1551,20 @@ final class SnapshotTestingTests: BaseTestCase {
 
       // Text glyph antialiasing differs across macOS point releases, so allow a small
       // perceptual tolerance on top of the pinned scale.
-      assertSnapshot(of: view, as: .image(perceptualPrecision: 0.98, scale: 2))
       assertSnapshot(
-        of: view, as: .image(perceptualPrecision: 0.98, layout: .sizeThatFits, scale: 2),
+        of: view,
+        as: .image(perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua), scale: 2))
+      assertSnapshot(
+        of: view,
+        as: .image(
+          perceptualPrecision: 0.98, layout: .sizeThatFits,
+          appearance: NSAppearance(named: .aqua), scale: 2),
         named: "size-that-fits")
       assertSnapshot(
         of: view,
         as: .image(
-          perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0), scale: 2),
+          perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0),
+          appearance: NSAppearance(named: .aqua), scale: 2),
         named: "fixed")
 
       // System colors resolve against the effective appearance, so the two renders must differ.
