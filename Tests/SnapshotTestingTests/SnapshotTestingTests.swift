@@ -404,10 +404,11 @@ final class SnapshotTestingTests: BaseTestCase {
   func testNSHostingController() {
     #if os(macOS)
       // Shapes in explicit colors rather than an SF Symbol and Text: what this asserts is the
-      // hosting strategy's own behavior (size override, pinned scale), and system glyphs and
-      // symbols are drawn by the OS, so their rasterization moves between releases and the
-      // reference stops being portable.
-      let controller = NSHostingController(rootView: swiftUIProbe.background(Color.yellow))
+      // hosting strategy's own behavior (size override, pinned scale), and system glyphs, symbols,
+      // and semantic colors like Color.yellow are drawn by the OS, so their rasterization moves
+      // between releases and the reference stops being portable.
+      let controller = NSHostingController(
+        rootView: swiftUIProbe.background(Color(red: 1.0, green: 0.8, blue: 0.0)))
       assertSnapshot(
         of: controller,
         as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2)
@@ -1552,7 +1553,10 @@ final class SnapshotTestingTests: BaseTestCase {
 
   #if os(macOS)
     func testSwiftUIView_macOS() {
-      let view = swiftUIProbe.background(Color.yellow)
+      // Fixed color, not Color.yellow: semantic colors are retuned across OS releases (macOS 26.5
+      // draws yellow as (255,204,0), 26.6 as (255,214,1)), which busts the reference beyond even
+      // perceptual tolerance while the library's own behavior is unchanged.
+      let view = swiftUIProbe.background(Color(red: 1.0, green: 0.8, blue: 0.0))
 
       assertSnapshot(of: view, as: .image(perceptualPrecision: 0.98, scale: 2))
       assertSnapshot(
