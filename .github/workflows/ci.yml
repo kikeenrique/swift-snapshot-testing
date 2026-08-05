@@ -14,10 +14,13 @@ jobs:
     strategy:
       matrix:
         xcode:
-          - '16.4'
+          - '26.6'
 
     name: macOS
-    runs-on: macos-15
+    # The runner OS must match the OS the references were recorded on: AppKit/SwiftUI/WebKit draw
+    # with the host OS (system colors, control internals, glyphs), so a macos-15 runner can never
+    # match macOS 26-recorded references, whatever the toolchain.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.xcode }}
