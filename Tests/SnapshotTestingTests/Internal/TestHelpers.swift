@@ -2,6 +2,32 @@ import XCTest
 
 @testable import SnapshotTesting
 
+#if canImport(SwiftUI) && os(macOS)
+  import SwiftUI
+
+  /// Content for the macOS SwiftUI strategy tests, drawn entirely from shapes in explicit colors.
+  ///
+  /// These tests assert on the strategy — layout mode, size override, pinned scale, appearance —
+  /// not on how the system draws. Text and SF Symbols are rasterized by the OS, so a reference
+  /// containing them stops matching after an OS update even though nothing in the library changed;
+  /// shapes and fixed colors keep the reference portable across machines and releases. Intrinsic
+  /// sizes are explicit so `.sizeThatFits` still has something to measure.
+  @available(macOS 11.0, *)
+  var swiftUIProbe: some SwiftUI.View {
+    HStack(spacing: 4) {
+      Circle()
+        .fill(Color(red: 0.2, green: 0.7, blue: 0.3))
+        .frame(width: 16, height: 16)
+      Rectangle()
+        .fill(Color(white: 1.0))
+        .frame(width: 48, height: 10)
+    }
+    .padding(5)
+    .background(RoundedRectangle(cornerRadius: 5.0).fill(Color(red: 0.1, green: 0.3, blue: 0.9)))
+    .padding(10)
+  }
+#endif
+
 #if os(iOS)
   let platform = "ios"
 #elseif os(tvOS)
