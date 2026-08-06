@@ -11,6 +11,33 @@ import XCTest
   let visionOSSuffix: String? = nil
 #endif
 
+#if canImport(SwiftUI) && os(visionOS)
+  import SwiftUI
+
+  /// Content for the visionOS SwiftUI strategy test, drawn entirely from shapes in explicit
+  /// colors.
+  ///
+  /// The test asserts on the strategy — layout mode, size override, window preset — not on how
+  /// the system draws. Text, SF Symbols, and semantic colors like `Color.yellow` are rasterized
+  /// by the OS, so a reference containing them survives only as long as the simulator runtime
+  /// pin holds; shapes and fixed colors keep the reference portable across runtimes by
+  /// construction. Intrinsic sizes are explicit so `.sizeThatFits` still has something to
+  /// measure.
+  var swiftUIProbe: some SwiftUI.View {
+    HStack(spacing: 4) {
+      Circle()
+        .fill(Color(red: 0.2, green: 0.7, blue: 0.3))
+        .frame(width: 16, height: 16)
+      Rectangle()
+        .fill(Color(white: 1.0))
+        .frame(width: 48, height: 10)
+    }
+    .padding(5)
+    .background(RoundedRectangle(cornerRadius: 5.0).fill(Color(red: 0.1, green: 0.3, blue: 0.9)))
+    .padding(10)
+  }
+#endif
+
 #if os(iOS)
   let platform = "ios"
 #elseif os(tvOS)

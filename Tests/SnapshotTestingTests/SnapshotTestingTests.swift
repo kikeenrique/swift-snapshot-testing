@@ -1521,18 +1521,10 @@ final class SnapshotTestingTests: BaseTestCase {
 
   #if os(visionOS)
     func testSwiftUIView_visionOS() {
-      struct MyView: SwiftUI.View {
-        var body: some SwiftUI.View {
-          HStack {
-            Image(systemName: "checkmark.circle.fill")
-            Text("Checked").fixedSize()
-          }
-          .padding(5)
-          .background(RoundedRectangle(cornerRadius: 5.0).fill(Color.blue))
-          .padding(10)
-        }
-      }
-      let view = MyView().background(Color.yellow)
+      // swiftUIProbe and a fixed background, not SF Symbol + Text + Color.yellow: OS-drawn
+      // pixels are only stable while the simulator runtime pin holds, shapes in explicit colors
+      // are stable by construction (see TestHelpers.swift).
+      let view = swiftUIProbe.background(Color(red: 1.0, green: 0.8, blue: 0.0))
 
       assertSnapshot(of: view, as: .image())
       assertSnapshot(of: view, as: .image(layout: .sizeThatFits), named: "size-that-fits")
