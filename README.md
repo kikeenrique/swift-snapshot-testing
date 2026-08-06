@@ -182,7 +182,11 @@ assertSnapshot(
 system chrome, and RealityKit content are composited by the system outside the app's render tree.
 The 2D capture path (`layer.render(in:)` and `drawHierarchy`) only sees what the app itself draws,
 so a snapshot of that content comes back empty. That is a platform boundary, not a bug in the
-library, and no strategy can work around it.
+library: on visionOS the final pixels are composited out of process, and glass adapts to the
+wearer's physical surroundings, so no in-process capture can reproduce them. (RealityKit entities
+are the one partial exception — RealityKit's `RealityRenderer` can rasterize a scene through a
+dedicated Metal pipeline — but that is a separate rendering path, not a capture of what
+`RealityView` displays.)
 
 What to do instead: snapshot the content with the glass or vibrancy effect disabled, which still
 pins layout, sizing, and text; and keep visionOS snapshots to app-rendered 2D content.
