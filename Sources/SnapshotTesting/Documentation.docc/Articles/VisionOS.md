@@ -81,3 +81,16 @@ A snapshot of such content coming back empty is a platform boundary, not a bug i
 
 Snapshot the content with the glass or vibrancy effect disabled, which still pins layout, sizing,
 and text; and keep visionOS snapshots to app-rendered 2D content.
+
+If you need to see the system-composited result itself, capture from outside the process: UI-test
+screenshots ([`XCUIScreen`][xcui-screen], [`XCUIScreenshot`][xcui-screenshot]) and
+`xcrun simctl io booted screenshot` record the compositor's output, so glass, ornaments, and
+RealityKit content are in the pixels. They are a complement, not a replacement: the capture is a
+perspective projection of your window in a simulated room — glass deliberately lets the
+surroundings show through ([HIG: Materials][hig-materials]) — so the pixels vary with environment,
+window placement, and pose, and each shot needs the full app running under a UI-test target. Use
+them for a few end-to-end "does the chrome appear" checks, and in-process snapshots for precise,
+isolated regression coverage of app-drawn content.
+
+[xcui-screen]: https://developer.apple.com/documentation/xctest/xcuiscreen
+[xcui-screenshot]: https://developer.apple.com/documentation/xctest/xcuiscreenshot
