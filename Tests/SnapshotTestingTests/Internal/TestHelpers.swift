@@ -38,6 +38,42 @@ import XCTest
   }
 #endif
 
+#if os(visionOS)
+  import UIKit
+
+  extension UIImage {
+    /// The color at the center of the image, for assertions that describe what was rendered
+    /// rather than compare it against a reference fixture.
+    func centerPixel() -> (red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8)? {
+      var pixel: [UInt8] = [0, 0, 0, 0]
+      guard
+        let context = CGContext(
+          data: &pixel,
+          width: 1,
+          height: 1,
+          bitsPerComponent: 8,
+          bytesPerRow: 4,
+          space: CGColorSpaceCreateDeviceRGB(),
+          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ),
+        let cgImage = cgImage
+      else { return nil }
+      // Draw the image scaled so its center pixel is the only one sampled.
+      context.interpolationQuality = .none
+      context.draw(
+        cgImage,
+        in: CGRect(
+          x: -CGFloat(cgImage.width) / 2 + 0.5,
+          y: -CGFloat(cgImage.height) / 2 + 0.5,
+          width: CGFloat(cgImage.width),
+          height: CGFloat(cgImage.height)
+        )
+      )
+      return (pixel[0], pixel[1], pixel[2], pixel[3])
+    }
+  }
+#endif
+
 #if os(iOS)
   let platform = "ios"
 #elseif os(tvOS)

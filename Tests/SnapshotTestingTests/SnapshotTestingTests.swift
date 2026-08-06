@@ -1520,6 +1520,62 @@ final class SnapshotTestingTests: BaseTestCase {
   #endif
 
   #if os(visionOS)
+    func testWebViewThatNeverPaints_visionOS() {
+      // Overriding `requestAnimationFrame` with a no-op is the deterministic stand-in for a page
+      // that finishes loading and never paints, which is what the deadline exists to catch.
+      let html = """
+        <script>window.requestAnimationFrame = () => {}</script>
+        """
+      let webView = WKWebView(frame: .init(x: 0, y: 0, width: 100, height: 100))
+      webView.loadHTMLString(html, baseURL: nil)
+
+      let deadline = webContentFrameDeadline
+      webContentFrameDeadline = 2
+      defer { webContentFrameDeadline = deadline }
+
+      let started = Date()
+      // NB: The comparison must never run, so re-recording stays off; the suite's
+      //     'record: .failed' mode would otherwise write a blank reference.
+      let failure = verifySnapshot(
+        of: webView,
+        as: .image(size: .init(width: 100, height: 100)),
+        named: "neverPaints",
+        record: .never,
+        timeout: webViewTimeout
+      )
+
+      XCTAssertEqual(
+        failure?.contains("never produced a frame"), true,
+        "Expected the painted-frame diagnosis, got: \(failure ?? "no failure")")
+      XCTAssertLessThan(Date().timeIntervalSince(started), webViewTimeout)
+    }
+
+    func testWebViewSnapshotWaitsForLoading_visionOS() throws {
+      // Snapshotting a web view that is still loading must produce the settled page: the
+      // `isLoading` observer, not an early render of a blank content process.
+      let html = """
+        <body style="margin:0;background:#ff0000"></body>
+        """
+      let size = CGSize(width: 100, height: 100)
+      let webView = WKWebView(frame: .init(origin: .zero, size: size))
+      webView.loadHTMLString(html, baseURL: nil)
+      XCTAssertTrue(webView.isLoading, "The observer path is only exercised while loading")
+
+      let tookSnapshot = XCTestExpectation(description: "Took snapshot")
+      var image: UIImage?
+      Snapshotting<UIView, UIImage>.image(size: size).snapshot(webView).run {
+        image = $0
+        tookSnapshot.fulfill()
+      }
+      XCTAssertEqual(XCTWaiter.wait(for: [tookSnapshot], timeout: webViewTimeout), .completed)
+
+      let center = try XCTUnwrap(XCTUnwrap(image).centerPixel())
+      XCTAssertEqual(center.red, 255)
+      XCTAssertLessThan(center.green, 8)
+      XCTAssertLessThan(center.blue, 8)
+      XCTAssertEqual(center.alpha, 255)
+    }
+
     func testSwiftUIView_visionOS() {
       // swiftUIProbe and a fixed background, not SF Symbol + Text + Color.yellow: OS-drawn
       // pixels are only stable while the simulator runtime pin holds, shapes in explicit colors
