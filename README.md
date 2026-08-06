@@ -154,6 +154,39 @@ assertSnapshot(of: user, as: .dump)
 
 If your data can be represented as an image, text, or data, you can write a snapshot test for it!
 
+## visionOS
+
+visionOS snapshots use the `visionOSWindow` config, which describes the system's initial window
+size (1280x720 pt at 2x). Windows are freely resizable by the wearer, so you can ask for any other
+geometry.
+
+``` swift
+assertSnapshot(of: vc, as: .image(on: .visionOSWindow))
+assertSnapshot(of: vc, as: .image(on: .visionOSWindow(width: 1920, height: 1080)))
+```
+
+Two visionOS behaviors surprise people the first time they record a reference.
+
+**Dynamic colors resolve dark by default.** visionOS renders `.label` white and `.systemBackground`
+clear unless an appearance is pinned, so a reference recorded without one looks surprisingly dark or
+blank. Pass the appearance you mean at the call site:
+
+``` swift
+assertSnapshot(
+  of: vc,
+  as: .image(on: .visionOSWindow, traits: .init(userInterfaceStyle: .light))
+)
+```
+
+**System-composited content cannot be captured.** Glass and vibrancy backgrounds, ornament-style
+system chrome, and RealityKit content are composited by the system outside the app's render tree.
+The 2D capture path (`layer.render(in:)` and `drawHierarchy`) only sees what the app itself draws,
+so a snapshot of that content comes back empty. That is a platform boundary, not a bug in the
+library, and no strategy can work around it.
+
+What to do instead: snapshot the content with the glass or vibrancy effect disabled, which still
+pins layout, sizing, and text; and keep visionOS snapshots to app-rendered 2D content.
+
 ## Documentation
 
 The latest documentation is available
