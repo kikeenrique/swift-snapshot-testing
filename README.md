@@ -167,9 +167,9 @@ assertSnapshot(of: vc, as: .image(on: .visionOSWindow(width: 1920, height: 1080)
 
 Two visionOS behaviors surprise people the first time they record a reference.
 
-**Dynamic colors resolve dark by default.** visionOS renders `.label` white and `.systemBackground`
-clear unless an appearance is pinned, so a reference recorded without one looks surprisingly dark or
-blank. Pass the appearance you mean at the call site:
+**Dynamic colors resolve dark by default.** visionOS has no Dark Mode setting, and unpinned dynamic
+colors resolve dark (`.label` white, `.systemBackground` clear), so a reference recorded without an
+appearance looks surprisingly dark or blank. Pass the appearance you mean at the call site:
 
 ``` swift
 assertSnapshot(
@@ -178,18 +178,11 @@ assertSnapshot(
 )
 ```
 
-**System-composited content cannot be captured.** Glass and vibrancy backgrounds, ornament-style
-system chrome, and RealityKit content are composited by the system outside the app's render tree.
-The 2D capture path (`layer.render(in:)` and `drawHierarchy`) only sees what the app itself draws,
-so a snapshot of that content comes back empty. That is a platform boundary, not a bug in the
-library: on visionOS the final pixels are composited out of process, and glass adapts to the
-wearer's physical surroundings, so no in-process capture can reproduce them. (RealityKit entities
-are the one partial exception — RealityKit's `RealityRenderer` can rasterize a scene through a
-dedicated Metal pipeline — but that is a separate rendering path, not a capture of what
-`RealityView` displays.)
-
-What to do instead: snapshot the content with the glass or vibrancy effect disabled, which still
-pins layout, sizing, and text; and keep visionOS snapshots to app-rendered 2D content.
+**System-composited content cannot be captured.** Glass and vibrancy backgrounds, ornaments, and
+RealityKit content are composited by the system outside the app's process, so a snapshot of that
+content comes back empty by design. For the full explanation — with references to Apple's
+documentation for each claim, and what to do instead — see
+[Snapshot testing on visionOS](Sources/SnapshotTesting/Documentation.docc/Articles/VisionOS.md).
 
 ## Documentation
 
