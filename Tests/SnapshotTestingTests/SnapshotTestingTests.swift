@@ -20,6 +20,30 @@ import XCTest
   import UIKit.UIView
 #endif
 
+#if os(visionOS)
+  // visionOS resolves dynamic colors as dark appearance by default, which renders the
+  // default label color white — invisible against these shared fixtures' light
+  // backgrounds. The visionOS image snapshots pin light appearance so the fixtures
+  // resolve the same dynamic colors as the iOS device configs.
+  private let visionOSLightTraits = UITraitCollection(userInterfaceStyle: .light)
+#endif
+
+// Timeout for the web view assertions. On visionOS the generous value absorbs the one-off WebKit
+// content process startup, which can exceed the default 5 seconds on a cold simulator. Every
+// other platform keeps the default so a hung web view fails fast.
+//
+// visionOS also rasterizes the fixture's SVG logo nondeterministically: repeated runs of an
+// unchanged page alternate between two results that differ by a single 1/255 step on 18 of the
+// image's 1.9M pixels. Comparing those snapshots perceptually absorbs the noise while still
+// failing on any difference a person could see.
+#if os(visionOS)
+  private let webViewTimeout: TimeInterval = 30
+  private let webViewPerceptualPrecision: Float = 0.98
+#else
+  private let webViewTimeout: TimeInterval = 5
+  private let webViewPerceptualPrecision: Float = 1
+#endif
+
 final class SnapshotTestingTests: BaseTestCase {
   func testAny() {
     struct User { let id: Int, name: String, bio: String }
@@ -69,7 +93,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testAutolayout() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let vc = UIViewController()
       vc.view.translatesAutoresizingMaskIntoConstraints = false
       let subview = UIView()
@@ -81,7 +105,7 @@ final class SnapshotTestingTests: BaseTestCase {
         subview.leftAnchor.constraint(equalTo: vc.view.leftAnchor),
         subview.rightAnchor.constraint(equalTo: vc.view.rightAnchor),
       ])
-      assertSnapshot(of: vc, as: .image)
+      assertSnapshot(of: vc, as: .image, named: visionOSSuffix)
     #endif
   }
 
@@ -115,7 +139,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testCGPath() {
-    #if os(iOS) || os(tvOS) || os(macOS)
+    #if os(iOS) || os(tvOS) || os(macOS) || os(visionOS)
       let path = CGPath.heart
 
       let osName: String
@@ -125,6 +149,8 @@ final class SnapshotTestingTests: BaseTestCase {
         osName = "tvOS"
       #elseif os(macOS)
         osName = "macOS"
+      #elseif os(visionOS)
+        osName = "visionOS"
       #endif
 
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
@@ -228,13 +254,15 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testPrecision() {
-    #if os(iOS) || os(macOS) || os(tvOS)
-      #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(macOS) || os(tvOS) || os(visionOS)
+      #if os(iOS) || os(tvOS) || os(visionOS)
         let label = UILabel()
         #if os(iOS)
           label.frame = CGRect(origin: .zero, size: CGSize(width: 43.5, height: 20.5))
         #elseif os(tvOS)
           label.frame = CGRect(origin: .zero, size: CGSize(width: 98, height: 46))
+        #elseif os(visionOS)
+          label.frame = CGRect(origin: .zero, size: CGSize(width: 43.5, height: 20.5))
         #endif
         label.backgroundColor = .white
       #elseif os(macOS)
@@ -245,20 +273,31 @@ final class SnapshotTestingTests: BaseTestCase {
         label.isEditable = false
       #endif
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        label.text = "Hello."
-        assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
-        label.text = "Hello"
-        assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
+        #if os(visionOS)
+          // Without pinned light appearance the label text would render white on this
+          // white background, making the precision comparison vacuous.
+          let strategy: Snapshotting<UIView, UIImage> = .image(
+            precision: 0.9, traits: visionOSLightTraits)
+          label.text = "Hello."
+          assertSnapshot(of: label, as: strategy, named: platform)
+          label.text = "Hello"
+          assertSnapshot(of: label, as: strategy, named: platform)
+        #else
+          label.text = "Hello."
+          assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
+          label.text = "Hello"
+          assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
+        #endif
       }
     #endif
   }
 
   func testImagePrecision() throws {
-    #if os(iOS) || os(tvOS) || os(macOS)
+    #if os(iOS) || os(tvOS) || os(macOS) || os(visionOS)
       let imageURL = URL(fileURLWithPath: String(#file), isDirectory: false)
         .deletingLastPathComponent()
         .appendingPathComponent("__Fixtures__/testImagePrecision.reference.png")
-      #if os(iOS) || os(tvOS)
+      #if os(iOS) || os(tvOS) || os(visionOS)
         let image = try XCTUnwrap(UIImage(contentsOfFile: imageURL.path))
       #elseif os(macOS)
         let image = try XCTUnwrap(NSImage(byReferencing: imageURL))
@@ -328,7 +367,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testTableViewController() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       class TableViewController: UITableViewController {
         override func viewDidLoad() {
           super.viewDidLoad()
@@ -347,12 +386,22 @@ final class SnapshotTestingTests: BaseTestCase {
         }
       }
       let tableViewController = TableViewController()
-      assertSnapshot(of: tableViewController, as: .image(on: .iPhoneSe))
+      #if os(visionOS)
+        // A single geometry suffices here: at narrower window widths the render is the same
+        // full-width rows at a smaller width (verified empirically at 480 pt), so extra
+        // window-size variants would add fixtures without adding coverage.
+        assertSnapshot(
+          of: tableViewController,
+          as: .image(on: .visionOSWindow, traits: visionOSLightTraits),
+          named: "visionos")
+      #else
+        assertSnapshot(of: tableViewController, as: .image(on: .iPhoneSe))
+      #endif
     #endif
   }
 
   func testAssertMultipleSnapshot() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       class TableViewController: UITableViewController {
         override func viewDidLoad() {
           super.viewDidLoad()
@@ -371,16 +420,31 @@ final class SnapshotTestingTests: BaseTestCase {
         }
       }
       let tableViewController = TableViewController()
-      assertSnapshots(
-        of: tableViewController,
-        as: ["iPhoneSE-image": .image(on: .iPhoneSe), "iPad-image": .image(on: .iPadMini)])
-      assertSnapshots(
-        of: tableViewController, as: [.image(on: .iPhoneX), .image(on: .iPhoneXsMax)])
+      #if os(visionOS)
+        // visionOS has a single, resizable window rather than fixed device screens, so exercise
+        // the multi-snapshot API with the window preset and a fixed size instead of device
+        // configs. The unnamed (indexed) variant cannot run here: unnamed references are
+        // written as `<test>.1.png`/`<test>.2.png` with no way to inject a platform suffix,
+        // so running it on visionOS would clobber the iOS fixtures of the same name.
+        assertSnapshots(
+          of: tableViewController,
+          as: [
+            "window-visionos": .image(on: .visionOSWindow, traits: visionOSLightTraits),
+            "fixed-visionos": .image(
+              size: .init(width: 640, height: 480), traits: visionOSLightTraits),
+          ])
+      #else
+        assertSnapshots(
+          of: tableViewController,
+          as: ["iPhoneSE-image": .image(on: .iPhoneSe), "iPad-image": .image(on: .iPadMini)])
+        assertSnapshots(
+          of: tableViewController, as: [.image(on: .iPhoneX), .image(on: .iPhoneXsMax)])
+      #endif
     #endif
   }
 
   func testTraits() {
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       if #available(iOS 11.0, tvOS 11.0, *) {
         class MyViewController: UIViewController {
           let topLabel = UILabel()
@@ -656,13 +720,47 @@ final class SnapshotTestingTests: BaseTestCase {
             of: viewController, as: .image(on: .tv), named: "tv")
           assertSnapshot(
             of: viewController, as: .image(on: .tv4K), named: "tv4k")
+        #elseif os(visionOS)
+          // visionOS has no fixed device screens or orientations, so exercise the default
+          // window preset plus one narrow geometry instead of the iPhone/iPad matrix.
+          //
+          // Note on size classes: measured empirically on the visionOS 2.5 simulator, the
+          // offscreen snapshot window resolves horizontal and vertical size classes as
+          // `.unspecified` at every window width (320-1920 pt) — unlike iOS device presets,
+          // whose size classes come from explicit config traits, the visionOS window config
+          // sets none and the offscreen window derives none from its geometry. A narrow
+          // window therefore exercises layout at a different aspect ratio, not a size-class
+          // change.
+          assertSnapshot(
+            of: viewController,
+            as: .image(on: .visionOSWindow, traits: visionOSLightTraits),
+            named: "visionos-window")
+          assertSnapshot(
+            of: viewController,
+            as: .image(on: .visionOSWindow(width: 640, height: 720), traits: visionOSLightTraits),
+            named: "visionos-window-640x720")
+          assertSnapshot(
+            of: viewController, as: .recursiveDescription(on: .visionOSWindow),
+            named: "visionos-window")
+
+          allContentSizes.forEach { name, contentSize in
+            assertSnapshot(
+              of: viewController,
+              as: .image(
+                on: .visionOSWindow,
+                traits: .init(traitsFrom: [
+                  visionOSLightTraits, .init(preferredContentSizeCategory: contentSize),
+                ])),
+              named: "visionos-window-\(name)"
+            )
+          }
         #endif
       }
     #endif
   }
 
   func testTraitsEmbeddedInTabNavigation() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       if #available(iOS 11.0, *) {
         class MyViewController: UIViewController {
           let topLabel = UILabel()
@@ -733,78 +831,106 @@ final class SnapshotTestingTests: BaseTestCase {
         }
 
         let myViewController = MyViewController()
+        #if os(visionOS)
+          // UITabBarController on visionOS resolves its content in dark appearance even when
+          // a light-style trait override is applied anywhere in the hierarchy, which would
+          // render the default label color white on this white background. Fix the label
+          // color instead.
+          for label in [
+            myViewController.topLabel, myViewController.leadingLabel,
+            myViewController.trailingLabel, myViewController.bottomLabel,
+          ] {
+            label.textColor = .black
+          }
+        #endif
         let navController = UINavigationController(rootViewController: myViewController)
         let viewController = UITabBarController()
         viewController.setViewControllers([navController], animated: false)
 
-        assertSnapshot(of: viewController, as: .image(on: .iPhoneSe), named: "iphone-se")
-        assertSnapshot(of: viewController, as: .image(on: .iPhone8), named: "iphone-8")
-        assertSnapshot(of: viewController, as: .image(on: .iPhone8Plus), named: "iphone-8-plus")
-        assertSnapshot(of: viewController, as: .image(on: .iPhoneX), named: "iphone-x")
-        assertSnapshot(of: viewController, as: .image(on: .iPhoneXr), named: "iphone-xr")
-        assertSnapshot(of: viewController, as: .image(on: .iPhoneXsMax), named: "iphone-xs-max")
-        assertSnapshot(of: viewController, as: .image(on: .iPadMini), named: "ipad-mini")
-        assertSnapshot(of: viewController, as: .image(on: .iPad9_7), named: "ipad-9-7")
-        assertSnapshot(of: viewController, as: .image(on: .iPad10_2), named: "ipad-10-2")
-        assertSnapshot(of: viewController, as: .image(on: .iPadPro10_5), named: "ipad-pro-10-5")
-        assertSnapshot(of: viewController, as: .image(on: .iPadPro11), named: "ipad-pro-11")
-        assertSnapshot(of: viewController, as: .image(on: .iPadPro12_9), named: "ipad-pro-12-9")
+        #if os(visionOS)
+          // visionOS has no fixed device screens or orientations, so snapshot the tab/nav
+          // hierarchy in the single window preset instead of the iPhone/iPad matrix.
+          assertSnapshot(
+            of: viewController,
+            as: .image(on: .visionOSWindow, traits: visionOSLightTraits),
+            named: "visionos-window")
+        #else
+          assertSnapshot(of: viewController, as: .image(on: .iPhoneSe), named: "iphone-se")
+          assertSnapshot(of: viewController, as: .image(on: .iPhone8), named: "iphone-8")
+          assertSnapshot(of: viewController, as: .image(on: .iPhone8Plus), named: "iphone-8-plus")
+          assertSnapshot(of: viewController, as: .image(on: .iPhoneX), named: "iphone-x")
+          assertSnapshot(of: viewController, as: .image(on: .iPhoneXr), named: "iphone-xr")
+          assertSnapshot(of: viewController, as: .image(on: .iPhoneXsMax), named: "iphone-xs-max")
+          assertSnapshot(of: viewController, as: .image(on: .iPadMini), named: "ipad-mini")
+          assertSnapshot(of: viewController, as: .image(on: .iPad9_7), named: "ipad-9-7")
+          assertSnapshot(of: viewController, as: .image(on: .iPad10_2), named: "ipad-10-2")
+          assertSnapshot(of: viewController, as: .image(on: .iPadPro10_5), named: "ipad-pro-10-5")
+          assertSnapshot(of: viewController, as: .image(on: .iPadPro11), named: "ipad-pro-11")
+          assertSnapshot(of: viewController, as: .image(on: .iPadPro12_9), named: "ipad-pro-12-9")
 
-        assertSnapshot(of: viewController, as: .image(on: .iPhoneSe(.portrait)), named: "iphone-se")
-        assertSnapshot(of: viewController, as: .image(on: .iPhone8(.portrait)), named: "iphone-8")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPhone8Plus(.portrait)), named: "iphone-8-plus")
-        assertSnapshot(of: viewController, as: .image(on: .iPhoneX(.portrait)), named: "iphone-x")
-        assertSnapshot(of: viewController, as: .image(on: .iPhoneXr(.portrait)), named: "iphone-xr")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPhoneXsMax(.portrait)), named: "iphone-xs-max")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPadMini(.landscape)), named: "ipad-mini")
-        assertSnapshot(of: viewController, as: .image(on: .iPad9_7(.landscape)), named: "ipad-9-7")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPad10_2(.landscape)), named: "ipad-10-2")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPadPro10_5(.landscape)), named: "ipad-pro-10-5")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPadPro11(.landscape)), named: "ipad-pro-11")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPadPro12_9(.landscape)), named: "ipad-pro-12-9")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhoneSe(.portrait)), named: "iphone-se")
+          assertSnapshot(of: viewController, as: .image(on: .iPhone8(.portrait)), named: "iphone-8")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhone8Plus(.portrait)), named: "iphone-8-plus")
+          assertSnapshot(of: viewController, as: .image(on: .iPhoneX(.portrait)), named: "iphone-x")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhoneXr(.portrait)), named: "iphone-xr")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhoneXsMax(.portrait)), named: "iphone-xs-max")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPadMini(.landscape)), named: "ipad-mini")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPad9_7(.landscape)), named: "ipad-9-7")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPad10_2(.landscape)), named: "ipad-10-2")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPadPro10_5(.landscape)), named: "ipad-pro-10-5")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPadPro11(.landscape)), named: "ipad-pro-11")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPadPro12_9(.landscape)), named: "ipad-pro-12-9")
 
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPhoneSe(.landscape)), named: "iphone-se-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPhone8(.landscape)), named: "iphone-8-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPhone8Plus(.landscape)),
-          named: "iphone-8-plus-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPhoneX(.landscape)), named: "iphone-x-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPhoneXr(.landscape)), named: "iphone-xr-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPhoneXsMax(.landscape)),
-          named: "iphone-xs-max-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPadMini(.portrait)), named: "ipad-mini-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPad9_7(.portrait)), named: "ipad-9-7-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPad10_2(.portrait)), named: "ipad-10-2-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPadPro10_5(.portrait)),
-          named: "ipad-pro-10-5-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPadPro11(.portrait)),
-          named: "ipad-pro-11-alternative")
-        assertSnapshot(
-          of: viewController, as: .image(on: .iPadPro12_9(.portrait)),
-          named: "ipad-pro-12-9-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhoneSe(.landscape)),
+            named: "iphone-se-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhone8(.landscape)), named: "iphone-8-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhone8Plus(.landscape)),
+            named: "iphone-8-plus-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhoneX(.landscape)), named: "iphone-x-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhoneXr(.landscape)),
+            named: "iphone-xr-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPhoneXsMax(.landscape)),
+            named: "iphone-xs-max-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPadMini(.portrait)), named: "ipad-mini-alternative"
+          )
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPad9_7(.portrait)), named: "ipad-9-7-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPad10_2(.portrait)), named: "ipad-10-2-alternative"
+          )
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPadPro10_5(.portrait)),
+            named: "ipad-pro-10-5-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPadPro11(.portrait)),
+            named: "ipad-pro-11-alternative")
+          assertSnapshot(
+            of: viewController, as: .image(on: .iPadPro12_9(.portrait)),
+            named: "ipad-pro-12-9-alternative")
+        #endif
       }
     #endif
   }
 
   func testCollectionViewsWithMultipleScreenSizes() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
 
       final class CollectionViewController: UIViewController, UICollectionViewDataSource,
         UICollectionViewDelegateFlowLayout
@@ -881,19 +1007,35 @@ final class SnapshotTestingTests: BaseTestCase {
 
       let viewController = CollectionViewController()
 
-      assertSnapshots(
-        of: viewController,
-        as: [
-          "ipad": .image(on: .iPadPro12_9),
-          "iphoneSe": .image(on: .iPhoneSe),
-          "iphone8": .image(on: .iPhone8),
-          "iphoneMax": .image(on: .iPhoneXsMax),
-        ])
+      #if os(visionOS)
+        // visionOS has freely resizable windows rather than multiple device screen sizes, so
+        // the size-dependent collection layout is exercised across representative window
+        // geometries: narrow (half the default width), the HIG default (1280x720 pt), and a
+        // large 16:9 window.
+        assertSnapshots(
+          of: viewController,
+          as: [
+            "visionos-window-640x720": .image(
+              on: .visionOSWindow(width: 640, height: 720), traits: visionOSLightTraits),
+            "visionos-window-1280x720": .image(on: .visionOSWindow, traits: visionOSLightTraits),
+            "visionos-window-1920x1080": .image(
+              on: .visionOSWindow(width: 1920, height: 1080), traits: visionOSLightTraits),
+          ])
+      #else
+        assertSnapshots(
+          of: viewController,
+          as: [
+            "ipad": .image(on: .iPadPro12_9),
+            "iphoneSe": .image(on: .iPhoneSe),
+            "iphone8": .image(on: .iPhone8),
+            "iphoneMax": .image(on: .iPhoneXsMax),
+          ])
+      #endif
     #endif
   }
 
   func testTraitsWithView() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       if #available(iOS 11.0, *) {
         let label = UILabel()
         label.font = .preferredFont(forTextStyle: .title1)
@@ -901,10 +1043,20 @@ final class SnapshotTestingTests: BaseTestCase {
         label.text = "What's the point?"
 
         allContentSizes.forEach { name, contentSize in
+          #if os(visionOS)
+            let fixtureName = "label-\(name)-visionos"
+            let traits = UITraitCollection(traitsFrom: [
+              .init(preferredContentSizeCategory: contentSize),
+              visionOSLightTraits,
+            ])
+          #else
+            let fixtureName = "label-\(name)"
+            let traits = UITraitCollection(preferredContentSizeCategory: contentSize)
+          #endif
           assertSnapshot(
             of: label,
-            as: .image(traits: .init(preferredContentSizeCategory: contentSize)),
-            named: "label-\(name)"
+            as: .image(traits: traits),
+            named: fixtureName
           )
         }
       }
@@ -912,7 +1064,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testTraitsWithViewController() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let label = UILabel()
       label.font = .preferredFont(forTextStyle: .title1)
       label.adjustsFontForContentSizeCategory = true
@@ -931,18 +1083,27 @@ final class SnapshotTestingTests: BaseTestCase {
       ])
 
       allContentSizes.forEach { name, contentSize in
-        assertSnapshot(
-          of: viewController,
-          as: .recursiveDescription(
-            on: .iPhoneSe, traits: .init(preferredContentSizeCategory: contentSize)),
-          named: "label-\(name)"
-        )
+        #if os(visionOS)
+          assertSnapshot(
+            of: viewController,
+            as: .recursiveDescription(
+              on: .visionOSWindow, traits: .init(preferredContentSizeCategory: contentSize)),
+            named: "label-\(name)-visionos"
+          )
+        #else
+          assertSnapshot(
+            of: viewController,
+            as: .recursiveDescription(
+              on: .iPhoneSe, traits: .init(preferredContentSizeCategory: contentSize)),
+            named: "label-\(name)"
+          )
+        #endif
       }
     #endif
   }
 
   func testUIBezierPath() {
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       let path = UIBezierPath.heart
 
       let osName: String
@@ -950,6 +1111,8 @@ final class SnapshotTestingTests: BaseTestCase {
         osName = "iOS"
       #elseif os(tvOS)
         osName = "tvOS"
+      #elseif os(visionOS)
+        osName = "visionOS"
       #endif
 
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
@@ -963,15 +1126,15 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testUIView() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let view = UIButton(type: .contactAdd)
-      assertSnapshot(of: view, as: .image)
-      assertSnapshot(of: view, as: .recursiveDescription)
+      assertSnapshot(of: view, as: .image, named: visionOSSuffix)
+      assertSnapshot(of: view, as: .recursiveDescription, named: visionOSSuffix)
     #endif
   }
 
   func testUIViewControllerLifeCycle() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       class ViewController: UIViewController {
         let viewDidLoadExpectation: XCTestExpectation
         let viewWillAppearExpectation: XCTestExpectation
@@ -1024,8 +1187,17 @@ final class SnapshotTestingTests: BaseTestCase {
       let viewDidDisappearExpectation = expectation(description: "viewDidDisappear")
       viewWillAppearExpectation.expectedFulfillmentCount = 4
       viewDidAppearExpectation.expectedFulfillmentCount = 4
-      viewWillDisappearExpectation.expectedFulfillmentCount = 4
-      viewDidDisappearExpectation.expectedFulfillmentCount = 4
+      #if os(visionOS)
+        // The visionOS window teardown after each snapshot delivers viewWillDisappear once per
+        // snapshot (instead of twice on iOS) and never completes the disappearance transition.
+        viewWillDisappearExpectation.expectedFulfillmentCount = 2
+        // The visionOS simulator does not deliver viewDidDisappear during window teardown, so the
+        // expectation is inverted rather than dropped from the wait below.
+        viewDidDisappearExpectation.isInverted = true
+      #else
+        viewWillDisappearExpectation.expectedFulfillmentCount = 4
+        viewDidDisappearExpectation.expectedFulfillmentCount = 4
+      #endif
 
       let viewController = ViewController(
         viewDidLoadExpectation: viewDidLoadExpectation,
@@ -1035,8 +1207,13 @@ final class SnapshotTestingTests: BaseTestCase {
         viewDidDisappearExpectation: viewDidDisappearExpectation
       )
 
-      assertSnapshot(of: viewController, as: .image)
-      assertSnapshot(of: viewController, as: .image)
+      #if os(visionOS)
+        assertSnapshot(of: viewController, as: .image, named: "visionos-1")
+        assertSnapshot(of: viewController, as: .image, named: "visionos-2")
+      #else
+        assertSnapshot(of: viewController, as: .image)
+        assertSnapshot(of: viewController, as: .image)
+      #endif
 
       wait(
         for: [
@@ -1050,30 +1227,30 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testCALayer() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let layer = CALayer()
       layer.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
       layer.backgroundColor = UIColor.red.cgColor
       layer.borderWidth = 4.0
       layer.borderColor = UIColor.black.cgColor
-      assertSnapshot(of: layer, as: .image)
+      assertSnapshot(of: layer, as: .image, named: visionOSSuffix)
     #endif
   }
 
   func testCALayerWithGradient() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let baseLayer = CALayer()
       baseLayer.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
       let gradientLayer = CAGradientLayer()
       gradientLayer.colors = [UIColor.red.cgColor, UIColor.yellow.cgColor]
       gradientLayer.frame = baseLayer.frame
       baseLayer.addSublayer(gradientLayer)
-      assertSnapshot(of: baseLayer, as: .image)
+      assertSnapshot(of: baseLayer, as: .image, named: visionOSSuffix)
     #endif
   }
 
   func testViewControllerHierarchy() {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let page = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal)
       page.setViewControllers([UIViewController()], direction: .forward, animated: false)
       let tab = UITabBarController()
@@ -1084,7 +1261,7 @@ final class SnapshotTestingTests: BaseTestCase {
         UINavigationController(rootViewController: UIViewController()),
         UINavigationController(rootViewController: UIViewController()),
       ]
-      assertSnapshot(of: tab, as: .hierarchy)
+      assertSnapshot(of: tab, as: .hierarchy, named: visionOSSuffix)
     #endif
   }
 
@@ -1139,7 +1316,7 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testWebView() throws {
-    #if os(iOS) || os(macOS)
+    #if os(iOS) || os(macOS) || os(visionOS)
       let fixtureUrl = URL(fileURLWithPath: String(#file), isDirectory: false)
         .deletingLastPathComponent()
         .appendingPathComponent("__Fixtures__/pointfree.html")
@@ -1149,15 +1326,17 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(
           of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
-          named: platform
+          as: .image(
+            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+          named: platform,
+          timeout: webViewTimeout
         )
       }
     #endif
   }
 
   func testViewWithZeroHeightOrWidth() {
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       var rect = CGRect(x: 0, y: 0, width: 350, height: 0)
       var view = UIView(frame: rect)
       view.backgroundColor = .red
@@ -1176,18 +1355,20 @@ final class SnapshotTestingTests: BaseTestCase {
   }
 
   func testViewAgainstEmptyImage() {
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       let rect = CGRect(x: 0, y: 0, width: 0, height: 0)
       let view = UIView(frame: rect)
       view.backgroundColor = .blue
 
-      let failure = verifySnapshot(of: view, as: .image, named: "notEmptyImage")
+      // NB: The comparison is expected to fail, so re-recording must stay off or the suite's
+      //     'record: .failed' mode overwrites the reference with the zero-size placeholder.
+      let failure = verifySnapshot(of: view, as: .image, named: "notEmptyImage", record: .never)
       XCTAssertNotNil(failure)
     #endif
   }
 
   func testEmbeddedWebView() throws {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
       let label = UILabel()
       label.text = "Hello, Blob!"
 
@@ -1203,16 +1384,24 @@ final class SnapshotTestingTests: BaseTestCase {
       stackView.axis = .vertical
 
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
+        #if os(visionOS)
+          let traits: UITraitCollection = visionOSLightTraits
+        #else
+          let traits = UITraitCollection()
+        #endif
         assertSnapshot(
           of: stackView,
-          as: .image(size: .init(width: 800, height: 600)),
-          named: platform
+          as: .image(
+            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600),
+            traits: traits),
+          named: platform,
+          timeout: webViewTimeout
         )
       }
     #endif
   }
 
-  #if os(iOS) || os(macOS)
+  #if os(iOS) || os(macOS) || os(visionOS)
     final class ManipulatingWKWebViewNavigationDelegate: NSObject, WKNavigationDelegate {
       func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         webView.evaluateJavaScript("document.body.children[0].classList.remove(\"hero\")")  // Change layout
@@ -1231,8 +1420,10 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(
           of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
-          named: platform
+          as: .image(
+            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+          named: platform,
+          timeout: webViewTimeout
         )
       }
       _ = manipulatingWKWebViewNavigationDelegate
@@ -1261,8 +1452,10 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         assertSnapshot(
           of: webView,
-          as: .image(size: .init(width: 800, height: 600)),
-          named: platform
+          as: .image(
+            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+          named: platform,
+          timeout: webViewTimeout
         )
       }
       _ = cancellingWKWebViewNavigationDelegate
@@ -1325,9 +1518,83 @@ final class SnapshotTestingTests: BaseTestCase {
       assertSnapshot(of: view, as: .image(layout: .device(config: .tv)), named: "device")
     }
   #endif
+
+  #if os(visionOS)
+    func testWebViewThatNeverPaints_visionOS() {
+      // Overriding `requestAnimationFrame` with a no-op is the deterministic stand-in for a page
+      // that finishes loading and never paints, which is what the deadline exists to catch.
+      let html = """
+        <script>window.requestAnimationFrame = () => {}</script>
+        """
+      let webView = WKWebView(frame: .init(x: 0, y: 0, width: 100, height: 100))
+      webView.loadHTMLString(html, baseURL: nil)
+
+      let deadline = webContentFrameDeadline
+      webContentFrameDeadline = 2
+      defer { webContentFrameDeadline = deadline }
+
+      let started = Date()
+      // NB: The comparison must never run, so re-recording stays off; the suite's
+      //     'record: .failed' mode would otherwise write a blank reference.
+      let failure = verifySnapshot(
+        of: webView,
+        as: .image(size: .init(width: 100, height: 100)),
+        named: "neverPaints",
+        record: .never,
+        timeout: webViewTimeout
+      )
+
+      XCTAssertEqual(
+        failure?.contains("never produced a frame"), true,
+        "Expected the painted-frame diagnosis, got: \(failure ?? "no failure")")
+      XCTAssertLessThan(Date().timeIntervalSince(started), webViewTimeout)
+    }
+
+    func testWebViewSnapshotWaitsForLoading_visionOS() throws {
+      // Snapshotting a web view that is still loading must produce the settled page: the
+      // `isLoading` observer, not an early render of a blank content process.
+      let html = """
+        <body style="margin:0;background:#ff0000"></body>
+        """
+      let size = CGSize(width: 100, height: 100)
+      let webView = WKWebView(frame: .init(origin: .zero, size: size))
+      webView.loadHTMLString(html, baseURL: nil)
+      XCTAssertTrue(webView.isLoading, "The observer path is only exercised while loading")
+
+      let tookSnapshot = XCTestExpectation(description: "Took snapshot")
+      var image: UIImage?
+      Snapshotting<UIView, UIImage>.image(size: size).snapshot(webView).run {
+        image = $0
+        tookSnapshot.fulfill()
+      }
+      XCTAssertEqual(XCTWaiter.wait(for: [tookSnapshot], timeout: webViewTimeout), .completed)
+
+      let center = try XCTUnwrap(XCTUnwrap(image).centerPixel())
+      XCTAssertEqual(center.red, 255)
+      XCTAssertLessThan(center.green, 8)
+      XCTAssertLessThan(center.blue, 8)
+      XCTAssertEqual(center.alpha, 255)
+    }
+
+    func testSwiftUIView_visionOS() {
+      // swiftUIProbe and a fixed background, not SF Symbol + Text + Color.yellow: OS-drawn
+      // pixels are only stable while the simulator runtime pin holds, shapes in explicit colors
+      // are stable by construction (see TestHelpers.swift).
+      let view = swiftUIProbe.background(Color(red: 1.0, green: 0.8, blue: 0.0))
+
+      assertSnapshot(of: view, as: .image())
+      assertSnapshot(of: view, as: .image(layout: .sizeThatFits), named: "size-that-fits")
+      assertSnapshot(
+        of: view, as: .image(layout: .fixed(width: 300.0, height: 100.0)), named: "fixed")
+      assertSnapshot(
+        of: view,
+        as: .image(layout: .device(config: .visionOSWindow), traits: visionOSLightTraits),
+        named: "device")
+    }
+  #endif
 }
 
-#if os(iOS)
+#if os(iOS) || os(visionOS)
   private let allContentSizes =
     [
       "extra-small": UIContentSizeCategory.extraSmall,

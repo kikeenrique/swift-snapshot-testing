@@ -1,4 +1,4 @@
-#if os(iOS) || os(tvOS)
+#if os(iOS) || os(tvOS) || os(visionOS)
   import UIKit
 
   extension Diffing where Value == UIImage {
@@ -23,13 +23,32 @@
       if let scale = scale, scale != 0.0 {
         imageScale = scale
       } else {
-        imageScale = UIScreen.main.scale
+        #if os(visionOS)
+          // visionOS has no UIScreen, so there is no screen scale to fall back on. Content
+          // rasterizes at a default @2x scale factor unless a layer opts in to dynamic content
+          // scaling, which doesn't apply to offscreen rendering. See "Drawing sharp layer-based
+          // content in visionOS":
+          // https://developer.apple.com/documentation/visionos/drawing-sharp-layer-based-content
+          //
+          // NB: This is only the scale the reference is *decoded* at. The reference is re-tagged
+          //     with the newly-taken snapshot's scale below, so failure messages report point
+          //     sizes in the snapshot's own scale rather than always assuming @2x.
+          imageScale = 2.0
+        #else
+          imageScale = UIScreen.main.scale
+        #endif
       }
       let toData: (UIImage) -> Data = { $0.pngData() ?? emptyImage().pngData()! }
       return .diff(
         toData: toData,
         fromData: { UIImage(data: $0, scale: imageScale)! }
       ) { old, new in
+        #if os(visionOS)
+          // Without a screen scale, the reference was decoded at a fixed default scale. Re-tag it
+          // with the newly-taken snapshot's scale so both images describe their (identical) pixel
+          // buffers in the same point space. An explicitly requested scale always wins.
+          let old = scale == nil || scale == 0.0 ? rescaled(old, to: new.scale) : old
+        #endif
         guard
           let message = compare(
             old, new, precision: precision, perceptualPrecision: perceptualPrecision)
@@ -48,6 +67,15 @@
         )
       }
     }
+
+    #if os(visionOS)
+      /// Re-tags an image with a different scale, leaving its pixel buffer untouched. Used to
+      /// describe a reference image in the same point space as the newly-taken snapshot.
+      private static func rescaled(_ image: UIImage, to scale: CGFloat) -> UIImage {
+        guard let cgImage = image.cgImage, scale > 0, scale != image.scale else { return image }
+        return UIImage(cgImage: cgImage, scale: scale, orientation: image.imageOrientation)
+      }
+    #endif
 
     /// Used when the image size has no width or no height to generated the default empty image
     private static func emptyImage() -> UIImage {
@@ -179,7 +207,7 @@
 
   private func diff(_ old: UIImage, _ new: UIImage) -> UIImage {
     normalizedComponentDiff(old, new)
-    ?? blendModeDiff(old, new)
+      ?? blendModeDiff(old, new)
   }
 
   private func blendModeDiff(_ old: UIImage, _ new: UIImage) -> UIImage {
@@ -194,99 +222,99 @@
     return differenceImage
   }
 
-private func normalizedComponentDiff(_ old: UIImage, _ new: UIImage) -> UIImage? {
-  guard let oldCgImage = old.cgImage,
-        let pngData = new.pngData(),
-        let newCgImage = UIImage(data: pngData)?.cgImage,
-        oldCgImage.width == newCgImage.width,
-        oldCgImage.height == newCgImage.height,
-        let oldData = oldCgImage.dataProvider?.data,
-        let newData = newCgImage.dataProvider?.data
-  else {
-    return nil
-  }
-  
-  guard let outputColorSpace = CGColorSpace(name: CGColorSpace.linearGray),
-        let outputFormat = vImage_CGImageFormat(
-          bitsPerComponent: imageContextBitsPerComponent,
-          bitsPerPixel: imageContextBitsPerComponent,
-          colorSpace: outputColorSpace,
-          bitmapInfo: .init()
-        )
-  else {
-    return nil
-  }
-  
-  let width = oldCgImage.width
-  let height = oldCgImage.height
-  let pixelCount = width * height
-  let scale = old.scale
-  
-  let oldBytes = CFDataGetBytePtr(oldData)!
-  let newBytes = CFDataGetBytePtr(newData)!
-  var diffBytes = [UInt8](repeating: 0, count: pixelCount)
-  
-  var index = 0
-  while index < pixelCount {
-    defer { index += 1 }
-    let pixelOffset = index * imageContextBytesPerPixel
-    
-    let rOld = Int16(oldBytes[pixelOffset])
-    let gOld = Int16(oldBytes[pixelOffset + 1])
-    let bOld = Int16(oldBytes[pixelOffset + 2])
-    let aOld = Int16(oldBytes[pixelOffset + 3])
-    
-    let rNew = Int16(newBytes[pixelOffset])
-    let gNew = Int16(newBytes[pixelOffset + 1])
-    let bNew = Int16(newBytes[pixelOffset + 2])
-    let aNew = Int16(newBytes[pixelOffset + 3])
-    
-    let rDiff = abs(rOld - rNew)
-    let gDiff = abs(gOld - gNew)
-    let bDiff = abs(bOld - bNew)
-    let aDiff = abs(aOld - aNew)
-    
-    let maxDiff = max(rDiff, gDiff, bDiff, aDiff)
-    diffBytes[index] = UInt8(maxDiff)
-  }
-  
-  let outputCgImage: CGImage? = diffBytes.withUnsafeMutableBytes { diffPtr in
-    var diffBuffer = vImage_Buffer(
-      data: diffPtr.baseAddress,
-      height: vImagePixelCount(height),
-      width: vImagePixelCount(width),
-      rowBytes: width
-    )
-    
-    do {
-      var normalizedBuffer = try vImage_Buffer(
-        width: width,
-        height: height,
-        bitsPerPixel: UInt32(imageContextBitsPerComponent)
-      )
-      defer { normalizedBuffer.free() }
-      
-      let error = vImageContrastStretch_Planar8(
-        &diffBuffer,
-        &normalizedBuffer,
-        vImage_Flags(kvImageNoFlags)
-      )
-      
-      let buffer = error == kvImageNoError ? normalizedBuffer : diffBuffer
-      
-      return try buffer.createCGImage(format: outputFormat)
-    } catch {
+  private func normalizedComponentDiff(_ old: UIImage, _ new: UIImage) -> UIImage? {
+    guard let oldCgImage = old.cgImage,
+      let pngData = new.pngData(),
+      let newCgImage = UIImage(data: pngData)?.cgImage,
+      oldCgImage.width == newCgImage.width,
+      oldCgImage.height == newCgImage.height,
+      let oldData = oldCgImage.dataProvider?.data,
+      let newData = newCgImage.dataProvider?.data
+    else {
       return nil
     }
+
+    guard let outputColorSpace = CGColorSpace(name: CGColorSpace.linearGray),
+      let outputFormat = vImage_CGImageFormat(
+        bitsPerComponent: imageContextBitsPerComponent,
+        bitsPerPixel: imageContextBitsPerComponent,
+        colorSpace: outputColorSpace,
+        bitmapInfo: .init()
+      )
+    else {
+      return nil
+    }
+
+    let width = oldCgImage.width
+    let height = oldCgImage.height
+    let pixelCount = width * height
+    let scale = old.scale
+
+    let oldBytes = CFDataGetBytePtr(oldData)!
+    let newBytes = CFDataGetBytePtr(newData)!
+    var diffBytes = [UInt8](repeating: 0, count: pixelCount)
+
+    var index = 0
+    while index < pixelCount {
+      defer { index += 1 }
+      let pixelOffset = index * imageContextBytesPerPixel
+
+      let rOld = Int16(oldBytes[pixelOffset])
+      let gOld = Int16(oldBytes[pixelOffset + 1])
+      let bOld = Int16(oldBytes[pixelOffset + 2])
+      let aOld = Int16(oldBytes[pixelOffset + 3])
+
+      let rNew = Int16(newBytes[pixelOffset])
+      let gNew = Int16(newBytes[pixelOffset + 1])
+      let bNew = Int16(newBytes[pixelOffset + 2])
+      let aNew = Int16(newBytes[pixelOffset + 3])
+
+      let rDiff = abs(rOld - rNew)
+      let gDiff = abs(gOld - gNew)
+      let bDiff = abs(bOld - bNew)
+      let aDiff = abs(aOld - aNew)
+
+      let maxDiff = max(rDiff, gDiff, bDiff, aDiff)
+      diffBytes[index] = UInt8(maxDiff)
+    }
+
+    let outputCgImage: CGImage? = diffBytes.withUnsafeMutableBytes { diffPtr in
+      var diffBuffer = vImage_Buffer(
+        data: diffPtr.baseAddress,
+        height: vImagePixelCount(height),
+        width: vImagePixelCount(width),
+        rowBytes: width
+      )
+
+      do {
+        var normalizedBuffer = try vImage_Buffer(
+          width: width,
+          height: height,
+          bitsPerPixel: UInt32(imageContextBitsPerComponent)
+        )
+        defer { normalizedBuffer.free() }
+
+        let error = vImageContrastStretch_Planar8(
+          &diffBuffer,
+          &normalizedBuffer,
+          vImage_Flags(kvImageNoFlags)
+        )
+
+        let buffer = error == kvImageNoError ? normalizedBuffer : diffBuffer
+
+        return try buffer.createCGImage(format: outputFormat)
+      } catch {
+        return nil
+      }
+    }
+
+    guard let outputCgImage else { return nil }
+
+    return UIImage(cgImage: outputCgImage, scale: scale, orientation: .up)
   }
-  
-  guard let outputCgImage else { return nil }
-  
-  return UIImage(cgImage: outputCgImage, scale: scale, orientation: .up)
-}
 #endif
 
-#if os(iOS) || os(tvOS) || os(macOS)
+#if os(iOS) || os(tvOS) || os(macOS) || os(visionOS)
   import Accelerate.vImage
   import CoreImage.CIKernel
   import MetalPerformanceShaders

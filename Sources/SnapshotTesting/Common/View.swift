@@ -1,17 +1,17 @@
-#if os(iOS) || os(macOS) || os(tvOS)
+#if os(iOS) || os(macOS) || os(tvOS) || os(visionOS)
   #if os(macOS)
     import Cocoa
   #endif
   import SceneKit
   import SpriteKit
-  #if os(iOS) || os(tvOS)
+  #if os(iOS) || os(tvOS) || os(visionOS)
     import UIKit
   #endif
-  #if os(iOS) || os(macOS)
+  #if os(iOS) || os(macOS) || os(visionOS)
     import WebKit
   #endif
 
-  #if os(iOS) || os(tvOS)
+  #if os(iOS) || os(tvOS) || os(visionOS)
     public struct ViewImageConfig: Sendable {
       public enum Orientation {
         case landscape
@@ -499,6 +499,32 @@
           size: .init(width: 3840, height: 2160),
           traits: .init()
         )
+      #elseif os(visionOS)
+        /// The default visionOS window size. Windows are freely resizable by the wearer, so this
+        /// is the system's initial size rather than a fixed device dimension: "By default, a
+        /// window measures 1280x720 pt."
+        /// https://developer.apple.com/design/human-interface-guidelines/windows#visionOS
+        public static let visionOSWindow = ViewImageConfig.visionOSWindow(
+          width: 1280, height: 720)
+
+        /// A visionOS window at an arbitrary size. visionOS publishes no fixed window bounds:
+        /// the HIG asks each app to choose its own minimum and maximum ("Choose a minimum and
+        /// maximum size for each window to help keep your content looking great."), so any
+        /// point size can be a valid window geometry.
+        /// https://developer.apple.com/design/human-interface-guidelines/windows#visionOS
+        /// https://developer.apple.com/documentation/visionOS/positioning-and-sizing-windows
+        /// - Note: Like the iOS and tvOS presets, this config describes only geometry and
+        ///   scale. visionOS resolves dynamic colors as dark appearance by default, which
+        ///   renders `.label` text white and `.systemBackground` clear; pass
+        ///   `traits: .init(userInterfaceStyle:)` at the snapshot call site to pin an
+        ///   explicit appearance.
+        public static func visionOSWindow(width: CGFloat, height: CGFloat) -> ViewImageConfig {
+          return .init(
+            safeArea: .zero,
+            size: .init(width: width, height: height),
+            traits: .init(displayScale: 2)
+          )
+        }
       #endif
     }
 
@@ -819,7 +845,7 @@
               imageView.frame = view.frame
               #if os(macOS)
                 view.superview?.addSubview(imageView, positioned: .above, relativeTo: view)
-              #elseif os(iOS) || os(tvOS)
+              #elseif os(iOS) || os(tvOS) || os(visionOS)
                 view.superview?.insertSubview(imageView, aboveSubview: view)
               #endif
               callback(imageView)
@@ -829,6 +855,69 @@
       }
       ?? view.subviews.flatMap(addImagesForRenderedViews)
   }
+
+  #if os(visionOS)
+    /// visionOS renders at 2x, matching `ViewImageConfig.visionOSWindow`. Pinning the scale
+    /// keeps the snapshot's pixel dimensions independent of whatever display scale the
+    /// renderer would otherwise inherit from the environment.
+    private let webContentSnapshotScale: CGFloat = 2
+
+    /// How long the painted-frame wait gives the page before declaring that it never painted.
+    ///
+    /// The wait starts only once loading has finished, so this does not have to absorb content
+    /// process startup — it only bounds the paint itself, and so can stay well under any
+    /// assertion timeout, which is what makes the specific diagnosis rather than the generic
+    /// timeout the message that reaches the user. `var` so tests can shorten it.
+    var webContentFrameDeadline: TimeInterval = 10
+
+    /// Resolves once the page has painted a frame, or reports that it never did.
+    ///
+    /// Rendering the layer copies whatever the web content process last committed, and that
+    /// process paints on its own schedule: loading finishing means the DOM is complete, not
+    /// that anything has been drawn, so rendering immediately can capture a blank page. Asking
+    /// the page for a frame is the only signal available, because the API that reports
+    /// readiness directly, `takeSnapshot`, returns transparent images on visionOS.
+    ///
+    /// Two animation frames rather than one: a `requestAnimationFrame` callback runs *before*
+    /// the frame it belongs to is painted, so only the nested one proves a frame went out.
+    ///
+    /// - Parameter completion: Called with whether the page painted before the deadline.
+    private func waitForRenderedWebContent(
+      of webView: WKWebView, completion: @escaping (_ paintedFrame: Bool) -> Void
+    ) {
+      // NB: The deadline and WebKit's reply both land on the main queue, so the flag needs no
+      //     synchronization; whichever arrives first makes the other a no-op.
+      var hasCompleted = false
+      func complete(paintedFrame: Bool) {
+        guard !hasCompleted else { return }
+        hasCompleted = true
+        completion(paintedFrame)
+      }
+
+      DispatchQueue.main.asyncAfter(deadline: .now() + webContentFrameDeadline) {
+        complete(paintedFrame: false)
+      }
+
+      webView.callAsyncJavaScript(
+        """
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        """,
+        in: nil,
+        in: .page
+      ) { _ in
+        complete(paintedFrame: true)
+      }
+    }
+
+    private func renderWebContent(of webView: WKWebView) -> UIImage {
+      let format = UIGraphicsImageRendererFormat.preferred()
+      format.scale = webContentSnapshotScale
+      return UIGraphicsImageRenderer(bounds: webView.bounds, format: format).image {
+        rendererContext in
+        webView.layer.render(in: rendererContext.cgContext)
+      }
+    }
+  #endif
 
   extension View {
     var snapshot: Async<Image>? {
@@ -850,7 +939,7 @@
           let cgImage = inWindow { skView.texture(from: skView.scene!)!.cgImage() }
           #if os(macOS)
             let image = Image(cgImage: cgImage, size: skView.bounds.size)
-          #elseif os(iOS) || os(tvOS)
+          #elseif os(iOS) || os(tvOS) || os(visionOS)
             let image = Image(cgImage: cgImage)
           #endif
           return Async(value: image)
@@ -858,7 +947,7 @@
           fatalError("Taking SKView snapshots requires macOS 10.11 or greater")
         }
       }
-      #if os(iOS) || os(macOS)
+      #if os(iOS) || os(macOS) || os(visionOS)
         if let wkWebView = self as? WKWebView {
           return Async<Image> { callback in
             let work = {
@@ -868,13 +957,44 @@
                     callback(Image())
                     return
                   }
-                  let configuration = WKSnapshotConfiguration()
-                  if #available(iOS 13, macOS 10.15, *) {
-                    configuration.afterScreenUpdates = false
-                  }
-                  wkWebView.takeSnapshot(with: configuration) { image, _ in
-                    callback(image!)
-                  }
+                  #if os(visionOS)
+                    // On visionOS, WKWebView.takeSnapshot returns a fully transparent image
+                    // even for loaded, JavaScript-responsive content, while rendering the
+                    // layer captures the page correctly — the opposite of iOS/macOS, where
+                    // out-of-process web content is only available via takeSnapshot. Loading
+                    // finishing does not mean the content process has painted, so wait for a
+                    // frame from the page itself before rendering its layer.
+                    waitForRenderedWebContent(of: wkWebView) { paintedFrame in
+                      guard paintedFrame else {
+                        SnapshotDiagnostic.record(
+                          """
+                          The web view never produced a frame within \
+                          \(webContentFrameDeadline) seconds.
+
+                          On visionOS a WKWebView is snapshot by rendering its layer, which shows \
+                          only what the web content process has already painted, so the snapshot \
+                          waits for the page to produce a frame. This page finished loading but \
+                          never painted: it is likely blocked on a resource or on JavaScript, or \
+                          it never schedules an animation frame.
+                          """
+                        )
+                        // NB: The image is discarded — the recorded diagnosis is returned before
+                        //     anything compares or records it — but the callback still has to run
+                        //     so the assertion fails now rather than at its own timeout.
+                        callback(Image())
+                        return
+                      }
+                      callback(renderWebContent(of: wkWebView))
+                    }
+                  #else
+                    let configuration = WKSnapshotConfiguration()
+                    if #available(iOS 13, macOS 10.15, *) {
+                      configuration.afterScreenUpdates = false
+                    }
+                    wkWebView.takeSnapshot(with: configuration) { image, _ in
+                      callback(image!)
+                    }
+                  #endif
                 }
               } else {
                 #if os(iOS)
@@ -889,9 +1009,12 @@
               var subscription: NSKeyValueObservation?
               subscription = wkWebView.observe(\.isLoading, options: [.initial, .new]) {
                 (webview, change) in
-                subscription?.invalidate()
-                subscription = nil
+                // NB: Keep observing until loading actually finishes. The observer also
+                //     fires immediately (`.initial`) with `isLoading == true`; tearing it
+                //     down on that first event would leave the snapshot waiting forever.
                 if change.newValue == false {
+                  subscription?.invalidate()
+                  subscription = nil
                   work()
                 }
               }
@@ -903,7 +1026,7 @@
       #endif
       return nil
     }
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       func asImage() -> Image {
         let renderer = UIGraphicsImageRenderer(bounds: bounds)
         return renderer.image { rendererContext in
@@ -913,7 +1036,7 @@
     #endif
   }
 
-  #if os(iOS) || os(tvOS)
+  #if os(iOS) || os(tvOS) || os(visionOS)
     extension UIApplication {
       static var sharedIfAvailable: UIApplication? {
         let sharedSelector = NSSelectorFromString("sharedApplication")
@@ -1076,11 +1199,26 @@
 
     private func getKeyWindow() -> UIWindow? {
       var window: UIWindow?
-      if #available(iOS 13.0, *) {
-        window = UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
-      } else {
-        window = UIApplication.sharedIfAvailable?.keyWindow
-      }
+      #if os(visionOS)
+        // 'UIApplication.windows' is deprecated on visionOS and documented to be empty
+        // for scene-based apps, so resolve the key window through the connected scenes
+        // and only fall back to the flat list.
+        let windowScenes =
+          UIApplication.sharedIfAvailable?.connectedScenes.compactMap { $0 as? UIWindowScene }
+          ?? []
+        window =
+          windowScenes.compactMap(\.keyWindow).first
+          ?? windowScenes.flatMap(\.windows).first { $0.isKeyWindow }
+          ?? UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
+      #else
+        if #available(iOS 13.0, *) {
+          window = UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
+        } else {
+          // 'keyWindow' is marked unavailable in visionOS, so this deprecated
+          // fallback can only be compiled on the other platforms.
+          window = UIApplication.sharedIfAvailable?.keyWindow
+        }
+      #endif
       return window
     }
 

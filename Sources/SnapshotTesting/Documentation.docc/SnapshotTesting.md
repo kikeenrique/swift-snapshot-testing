@@ -8,6 +8,7 @@ Powerfully flexible snapshot testing.
 
 - ``assertSnapshot(of:as:named:record:timeout:file:testName:line:)``
 - <doc:IntegratingWithTestFrameworks>
+- <doc:VisionOS>
 - <doc:MigrationGuides>
 
 ### Strategies
