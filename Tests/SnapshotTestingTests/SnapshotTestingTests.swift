@@ -401,6 +401,233 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
+  func testNSViewUnderConstraintsIsRestoredAfterPinnedScale() {
+    #if os(macOS)
+      // Detaching the view for the pinned-scale render deactivates every constraint its ancestors
+      // hold against it. Restoration must reinstate the hierarchy position, the frame, the
+      // autoresizing-translation flag, and the *same* constraint objects — so that a fresh layout
+      // pass still resolves to the pre-snapshot geometry instead of corrupting the next assertion.
+      let root = NSView(frame: CGRect(x: 0, y: 0, width: 120, height: 80))
+      root.wantsLayer = true
+      root.layer?.backgroundColor = NSColor.white.cgColor
+
+      let container = NSView()
+      container.wantsLayer = true
+      container.layer?.backgroundColor = NSColor.gray.cgColor
+      container.translatesAutoresizingMaskIntoConstraints = false
+      root.addSubview(container)
+
+      let view = NSView()
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.blue.cgColor
+      view.translatesAutoresizingMaskIntoConstraints = false
+      container.addSubview(view)
+
+      let containerConstraints = [
+        container.topAnchor.constraint(equalTo: root.topAnchor),
+        container.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+        container.widthAnchor.constraint(equalToConstant: 120),
+        container.heightAnchor.constraint(equalToConstant: 80),
+      ]
+      // Size and position constraints referencing the view, held by its superview...
+      let superviewConstraints = [
+        view.widthAnchor.constraint(equalToConstant: 40),
+        view.heightAnchor.constraint(equalToConstant: 20),
+        view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
+      ]
+      // ...and one held by a grandparent, which the save loop only finds because it walks *all*
+      // ancestors rather than just the immediate superview.
+      let grandparentConstraint = view.topAnchor.constraint(equalTo: root.topAnchor, constant: 15)
+      let viewConstraints = superviewConstraints + [grandparentConstraint]
+      NSLayoutConstraint.activate(containerConstraints + viewConstraints)
+
+      let window = NSWindow(
+        contentRect: root.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = root
+      root.layoutSubtreeIfNeeded()
+
+      let originalFrame = view.frame
+      XCTAssertEqual(originalFrame.size, CGSize(width: 40, height: 20))
+
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
+      XCTAssertEqual(image.representations[0].pixelsWide, 80)
+      XCTAssertEqual(image.representations[0].pixelsHigh, 40)
+
+      XCTAssertTrue(view.superview === container, "superview identity must be restored")
+      XCTAssertEqual(container.subviews.firstIndex(of: view), 0, "subview index must be restored")
+      XCTAssertTrue(view.window === window, "the view must be back in its original window")
+      XCTAssertEqual(view.frame, originalFrame, "frame must be restored")
+      XCTAssertFalse(
+        view.translatesAutoresizingMaskIntoConstraints,
+        "the offscreen window sets translatesAutoresizingMaskIntoConstraints; it must be restored"
+      )
+
+      // Every constraint referencing the view is still installed and active — compared by object
+      // identity, not by count, so a "restoration" that installed equivalent replacements would
+      // still fail. The walk starts at the view itself because AppKit installs a self-sizing
+      // constraint (`view.width == 40`) on the view, not on an ancestor.
+      var installed: Set<ObjectIdentifier> = []
+      var ancestor: NSView? = view
+      while let current = ancestor {
+        for constraint in current.constraints { installed.insert(ObjectIdentifier(constraint)) }
+        ancestor = current.superview
+      }
+      for constraint in viewConstraints {
+        XCTAssertTrue(
+          installed.contains(ObjectIdentifier(constraint)),
+          "constraint \(constraint) was not reinstalled on an ancestor"
+        )
+        XCTAssertTrue(constraint.isActive, "constraint \(constraint) was left inactive")
+      }
+
+      // The decisive check: the constraints still *drive* the layout to the same geometry.
+      root.layoutSubtreeIfNeeded()
+      XCTAssertEqual(
+        view.frame, originalFrame, "layout must still resolve to the pre-snapshot frame"
+      )
+
+      window.contentView = nil
+    #endif
+  }
+
+  func testNSViewInStackViewIsRestoredAfterPinnedScale() {
+    #if os(macOS)
+      // `NSStackView` tracks its children in `arrangedSubviews`, which a naive
+      // superview/index restoration re-adds as a plain subview only. Snapshotting an arranged
+      // subview must leave the stack laying out exactly as it did before.
+      func makeBox(_ color: NSColor) -> NSView {
+        let box = NSView()
+        box.wantsLayer = true
+        box.layer?.backgroundColor = color.cgColor
+        box.translatesAutoresizingMaskIntoConstraints = false
+        box.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        box.heightAnchor.constraint(equalToConstant: 10).isActive = true
+        return box
+      }
+
+      let boxes = [makeBox(.red), makeBox(.green), makeBox(.blue)]
+      let stack = NSStackView(views: boxes)
+      stack.orientation = .horizontal
+      stack.spacing = 4
+      stack.frame = CGRect(x: 0, y: 0, width: 100, height: 40)
+
+      let window = NSWindow(
+        contentRect: stack.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = stack
+      stack.layoutSubtreeIfNeeded()
+
+      let framesBefore = boxes.map(\.frame)
+      let target = boxes[1]
+
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(target).run { image = $0 }
+      XCTAssertEqual(image.representations[0].pixelsWide, 40)
+
+      XCTAssertTrue(target.superview === stack, "superview identity must be restored")
+      // NB: Known library bug (M5) — restoration reinstates the view as a plain subview via
+      //     `superview.subviews`, which `NSStackView` does not treat as re-arranging it: the view
+      //     drops out of `arrangedSubviews` permanently. Frames survive here only because the
+      //     stack's own constraints against the view are saved and reactivated; the stack has
+      //     nonetheless stopped managing the view. Reported, deliberately not fixed here.
+      XCTExpectFailure("NSStackView arranged-subview membership is not restored") {
+        if stack.arrangedSubviews.firstIndex(of: target) != 1 {
+          XCTFail("the view must be restored as an arranged subview at its original position")
+        }
+      }
+
+      stack.layoutSubtreeIfNeeded()
+      XCTAssertEqual(
+        boxes.map(\.frame), framesBefore, "the stack must lay its children out identically"
+      )
+
+      window.contentView = nil
+    #endif
+  }
+
+  func testNSViewInWindowConsecutivePinnedScaleSnapshotsAreIdentical() {
+    #if os(macOS)
+      // The restoration round-trip must leave no residue: snapshotting the same in-window view
+      // twice back-to-back has to produce byte-identical PNGs, not merely similar-looking ones.
+      let view = NSView(frame: CGRect(x: 0, y: 0, width: 30, height: 20))
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.blue.cgColor
+      let inner = NSView(frame: CGRect(x: 5, y: 5, width: 10, height: 10))
+      inner.wantsLayer = true
+      inner.layer?.backgroundColor = NSColor.red.cgColor
+      view.addSubview(inner)
+
+      let window = NSWindow(
+        contentRect: view.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = view
+
+      func renderPNG() -> Data {
+        var image: NSImage!
+        Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
+        let rep = image.representations[0] as! NSBitmapImageRep
+        XCTAssertEqual(rep.pixelsWide, 60)
+        XCTAssertEqual(rep.pixelsHigh, 40)
+        return rep.representation(using: .png, properties: [:])!
+      }
+
+      let first = renderPNG()
+      let second = renderPNG()
+      XCTAssertEqual(
+        first, second, "a second pinned-scale render must be byte-identical to the first"
+      )
+
+      window.contentView = nil
+    #endif
+  }
+
+  func testNSViewInWindowRecursiveDescriptionSurvivesPinnedScaleSnapshot() {
+    #if os(macOS)
+      // Detaching the view dirties layout flags across its subtree; if they are not settled back
+      // down, the residue shows up as changed frames in a later `recursiveDescription` snapshot.
+      let view = NSView(frame: CGRect(x: 0, y: 0, width: 40, height: 24))
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.blue.cgColor
+      let inner = NSView(frame: CGRect(x: 4, y: 4, width: 12, height: 12))
+      inner.wantsLayer = true
+      inner.layer?.backgroundColor = NSColor.red.cgColor
+      view.addSubview(inner)
+
+      let window = NSWindow(
+        contentRect: view.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = view
+
+      func describe() -> String {
+        var description: String!
+        Snapshotting<NSView, String>.recursiveDescription.snapshot(view).run { description = $0 }
+        return description
+      }
+
+      // Settle layout first, so the "before" string records a clean subtree: anything the image
+      // snapshot leaves dirty (an `L`/`l` needsLayout flag, a moved frame) then shows up as a
+      // difference rather than being masked by pre-existing dirt.
+      view.layoutSubtreeIfNeeded()
+      let before = describe()
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
+      XCTAssertEqual(image.representations[0].pixelsWide, 80)
+      let after = describe()
+
+      XCTAssertEqual(
+        before, after, "a pinned-scale image snapshot must not perturb the recursive description"
+      )
+
+      window.contentView = nil
+    #endif
+  }
+
   func testNSViewZeroSizeFailsInsteadOfCrashing() {
     #if os(macOS)
       // A view that cannot be rendered is a per-assertion input problem, not a reason to take the
