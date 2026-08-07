@@ -862,7 +862,15 @@
     /// renderer would otherwise inherit from the environment.
     private let webContentSnapshotScale: CGFloat = 2
 
-    /// Resolves once the page has painted a frame.
+    /// How long the painted-frame wait gives the page before declaring that it never painted.
+    ///
+    /// The wait starts only once loading has finished, so this does not have to absorb content
+    /// process startup — it only bounds the paint itself, and so can stay well under any
+    /// assertion timeout, which is what makes the specific diagnosis rather than the generic
+    /// timeout the message that reaches the user. `var` so tests can shorten it.
+    var webContentFrameDeadline: TimeInterval = 10
+
+    /// Resolves once the page has painted a frame, or reports that it never did.
     ///
     /// Rendering the layer copies whatever the web content process last committed, and that
     /// process paints on its own schedule: loading finishing means the DOM is complete, not
@@ -872,9 +880,24 @@
     ///
     /// Two animation frames rather than one: a `requestAnimationFrame` callback runs *before*
     /// the frame it belongs to is painted, so only the nested one proves a frame went out.
+    ///
+    /// - Parameter completion: Called with whether the page painted before the deadline.
     private func waitForRenderedWebContent(
-      of webView: WKWebView, completion: @escaping () -> Void
+      of webView: WKWebView, completion: @escaping (_ paintedFrame: Bool) -> Void
     ) {
+      // NB: The deadline and WebKit's reply both land on the main queue, so the flag needs no
+      //     synchronization; whichever arrives first makes the other a no-op.
+      var hasCompleted = false
+      func complete(paintedFrame: Bool) {
+        guard !hasCompleted else { return }
+        hasCompleted = true
+        completion(paintedFrame)
+      }
+
+      DispatchQueue.main.asyncAfter(deadline: .now() + webContentFrameDeadline) {
+        complete(paintedFrame: false)
+      }
+
       webView.callAsyncJavaScript(
         """
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -882,7 +905,7 @@
         in: nil,
         in: .page
       ) { _ in
-        completion()
+        complete(paintedFrame: true)
       }
     }
 
@@ -941,7 +964,26 @@
                     // out-of-process web content is only available via takeSnapshot. Loading
                     // finishing does not mean the content process has painted, so wait for a
                     // frame from the page itself before rendering its layer.
-                    waitForRenderedWebContent(of: wkWebView) {
+                    waitForRenderedWebContent(of: wkWebView) { paintedFrame in
+                      guard paintedFrame else {
+                        SnapshotDiagnostic.record(
+                          """
+                          The web view never produced a frame within \
+                          \(webContentFrameDeadline) seconds.
+
+                          On visionOS a WKWebView is snapshot by rendering its layer, which shows \
+                          only what the web content process has already painted, so the snapshot \
+                          waits for the page to produce a frame. This page finished loading but \
+                          never painted: it is likely blocked on a resource or on JavaScript, or \
+                          it never schedules an animation frame.
+                          """
+                        )
+                        // NB: The image is discarded — the recorded diagnosis is returned before
+                        //     anything compares or records it — but the callback still has to run
+                        //     so the assertion fails now rather than at its own timeout.
+                        callback(Image())
+                        return
+                      }
                       callback(renderWebContent(of: wkWebView))
                     }
                   #else

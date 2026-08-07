@@ -11,16 +11,18 @@ import XCTest
   let visionOSSuffix: String? = nil
 #endif
 
-#if canImport(SwiftUI) && os(macOS)
+#if canImport(SwiftUI) && (os(macOS) || os(visionOS))
   import SwiftUI
 
-  /// Content for the macOS SwiftUI strategy tests, drawn entirely from shapes in explicit colors.
+  /// Content for the macOS and visionOS SwiftUI strategy tests, drawn entirely from shapes in
+  /// explicit colors.
   ///
-  /// These tests assert on the strategy — layout mode, size override, pinned scale, appearance —
-  /// not on how the system draws. Text and SF Symbols are rasterized by the OS, so a reference
-  /// containing them stops matching after an OS update even though nothing in the library changed;
-  /// shapes and fixed colors keep the reference portable across machines and releases. Intrinsic
-  /// sizes are explicit so `.sizeThatFits` still has something to measure.
+  /// These tests assert on the strategy — layout mode, size override, pinned scale, appearance,
+  /// window preset — not on how the system draws. Text, SF Symbols, and semantic colors like
+  /// `Color.yellow` are rasterized by the OS, so a reference containing them stops matching after
+  /// an OS update, or survives only as long as the simulator runtime pin holds; shapes and fixed
+  /// colors keep the reference portable across machines, releases, and runtimes by construction.
+  /// Intrinsic sizes are explicit so `.sizeThatFits` still has something to measure.
   @available(macOS 11.0, *)
   var swiftUIProbe: some SwiftUI.View {
     HStack(spacing: 4) {
@@ -34,6 +36,42 @@ import XCTest
     .padding(5)
     .background(RoundedRectangle(cornerRadius: 5.0).fill(Color(red: 0.1, green: 0.3, blue: 0.9)))
     .padding(10)
+  }
+#endif
+
+#if os(visionOS)
+  import UIKit
+
+  extension UIImage {
+    /// The color at the center of the image, for assertions that describe what was rendered
+    /// rather than compare it against a reference fixture.
+    func centerPixel() -> (red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8)? {
+      var pixel: [UInt8] = [0, 0, 0, 0]
+      guard
+        let context = CGContext(
+          data: &pixel,
+          width: 1,
+          height: 1,
+          bitsPerComponent: 8,
+          bytesPerRow: 4,
+          space: CGColorSpaceCreateDeviceRGB(),
+          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ),
+        let cgImage = cgImage
+      else { return nil }
+      // Draw the image scaled so its center pixel is the only one sampled.
+      context.interpolationQuality = .none
+      context.draw(
+        cgImage,
+        in: CGRect(
+          x: -CGFloat(cgImage.width) / 2 + 0.5,
+          y: -CGFloat(cgImage.height) / 2 + 0.5,
+          width: CGFloat(cgImage.width),
+          height: CGFloat(cgImage.height)
+        )
+      )
+      return (pixel[0], pixel[1], pixel[2], pixel[3])
+    }
   }
 #endif
 
