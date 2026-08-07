@@ -43,6 +43,36 @@ import XCTest
 #endif
 
 #if os(macOS) || os(iOS) || os(tvOS)
+  extension Snapshotting where Value == SnapshotTesting.View, Format == SnapshotTesting.Image {
+    /// `.image`, with the light appearance pinned — one spelling on every platform.
+    ///
+    /// Both platforms' image strategies default to inheriting the appearance from the host, which
+    /// makes the recording machine's system setting part of the reference: a reference recorded in
+    /// Dark mode does not match one recorded in Light mode, and a control drawn with dynamic system
+    /// colors can come out light-on-light with no visible content at all. Pinning is the fix, but it
+    /// is spelled twice — AppKit takes `appearance: NSAppearance(named: .aqua)`, UIKit takes
+    /// `traits: UITraitCollection(userInterfaceStyle: .light)` — so cross-platform tests need a
+    /// `#if` fork purely to change the parameter's name.
+    ///
+    /// macOS additionally pins `scale: 2`. A pinned scale and a pinned appearance are the same
+    /// portability concern (both keep the host machine out of the reference), and UIKit has no
+    /// `scale:` parameter because the simulator's scale already comes from the trait collection —
+    /// that asymmetry belongs here rather than at every call site.
+    static func lightImage(
+      precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil
+    ) -> Snapshotting {
+      #if os(macOS)
+        return .image(
+          precision: precision, perceptualPrecision: perceptualPrecision, size: size,
+          appearance: NSAppearance(named: .aqua), scale: 2)
+      #else
+        return .image(
+          precision: precision, perceptualPrecision: perceptualPrecision, size: size,
+          traits: .init(userInterfaceStyle: .light))
+      #endif
+    }
+  }
+
   extension CGPath {
     /// Creates an approximation of a heart at a 45º angle with a circle above, using all available element types:
     static var heart: CGPath {

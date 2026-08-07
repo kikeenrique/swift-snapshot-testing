@@ -220,7 +220,7 @@ final class SnapshotTestingTests: BaseTestCase {
         // produced a reference with no visible text at all.
         assertSnapshot(
           of: button,
-          as: .image(perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua), scale: 2))
+          as: .lightImage(perceptualPrecision: 0.98))
         assertSnapshot(of: button, as: .recursiveDescription)
       }
     #endif
@@ -480,9 +480,7 @@ final class SnapshotTestingTests: BaseTestCase {
         #if os(macOS)
           assertSnapshot(
             of: label,
-            as: .image(
-              precision: 0.9, perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua),
-              scale: 2),
+            as: .lightImage(precision: 0.9, perceptualPrecision: 0.98),
             named: platform)
         #else
           assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
@@ -491,9 +489,7 @@ final class SnapshotTestingTests: BaseTestCase {
         #if os(macOS)
           assertSnapshot(
             of: label,
-            as: .image(
-              precision: 0.9, perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua),
-              scale: 2),
+            as: .lightImage(precision: 0.9, perceptualPrecision: 0.98),
             named: platform)
         #else
           assertSnapshot(of: label, as: .image(precision: 0.9), named: platform)
