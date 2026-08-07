@@ -27,7 +27,8 @@
     ///     references that are portable across machines. The view renders in a temporary
     ///     offscreen window that rasterizes at the pinned scale; a view already hosted in a
     ///     window is moved there for the render and restored to its original hierarchy, frame,
-    ///     and constraints afterwards. Does not apply to SceneKit, SpriteKit, or WebKit views,
+    ///     and constraints afterwards — including its position among a stack view's arranged
+    ///     subviews. Does not apply to SceneKit, SpriteKit, or WebKit views,
     ///     which render through their own snapshot APIs at a fixed @2x.
     public static func image(
       precision: Float = 1, perceptualPrecision: Float = 1, size: CGSize? = nil,
@@ -79,6 +80,13 @@
                 let originalWindow = view.window
                 let originalSuperview = view.superview
                 let originalIndex = originalSuperview?.subviews.firstIndex(of: view)
+                // `NSStackView` keeps a side-channel registry of the children it lays out and
+                // drops the view from it the moment the view leaves the hierarchy; splicing the
+                // view back into `subviews` restores containment but not management, so the
+                // arranged position has to be captured here, before the move, and reinstated
+                // through the stack's own API.
+                let originalArrangedIndex =
+                  (originalSuperview as? NSStackView)?.arrangedSubviews.firstIndex(of: view)
                 let wasContentView = originalWindow?.contentView === view
                 let originalFrame = view.frame
                 let originalTranslates = view.translatesAutoresizingMaskIntoConstraints
@@ -103,6 +111,11 @@
 
                 if wasContentView {
                   originalWindow?.contentView = view
+                } else if let stackView = originalSuperview as? NSStackView,
+                  let arrangedIndex = originalArrangedIndex
+                {
+                  stackView.insertArrangedSubview(
+                    view, at: min(arrangedIndex, stackView.arrangedSubviews.count))
                 } else if let superview = originalSuperview, let index = originalIndex {
                   var subviews = superview.subviews
                   subviews.insert(view, at: min(index, subviews.count))

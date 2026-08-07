@@ -529,16 +529,12 @@ final class SnapshotTestingTests: BaseTestCase {
       XCTAssertEqual(image.representations[0].pixelsWide, 40)
 
       XCTAssertTrue(target.superview === stack, "superview identity must be restored")
-      // NB: Known library bug (M5) — restoration reinstates the view as a plain subview via
-      //     `superview.subviews`, which `NSStackView` does not treat as re-arranging it: the view
-      //     drops out of `arrangedSubviews` permanently. Frames survive here only because the
-      //     stack's own constraints against the view are saved and reactivated; the stack has
-      //     nonetheless stopped managing the view. Reported, deliberately not fixed here.
-      XCTExpectFailure("NSStackView arranged-subview membership is not restored") {
-        if stack.arrangedSubviews.firstIndex(of: target) != 1 {
-          XCTFail("the view must be restored as an arranged subview at its original position")
-        }
-      }
+      // Containment alone is not enough: the stack must still be managing the view, at the same
+      // arranged position it held before the snapshot.
+      XCTAssertEqual(
+        stack.arrangedSubviews.firstIndex(of: target), 1,
+        "the view must be restored as an arranged subview at its original position"
+      )
 
       stack.layoutSubtreeIfNeeded()
       XCTAssertEqual(
