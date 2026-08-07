@@ -40,7 +40,15 @@
         if let size = size { view.frame.size = size }
         if let appearance = appearance { view.appearance = appearance }
         guard view.frame.width > 0, view.frame.height > 0 else {
-          fatalError("View not renderable to image at size \(view.frame.size)")
+          // NB: Crashing the process for a per-assertion input problem would take the rest of the
+          //     suite down with it; diagnose instead and let `verifySnapshot` fail this one test.
+          //     The placeholder is never compared or recorded — the diagnostic wins first.
+          SnapshotDiagnostic.record(
+            """
+            View is not renderable to an image: its size is \(view.frame.size). \
+            Give the view a non-zero size, e.g. via the strategy's "size:" parameter.
+            """)
+          return Async(value: NSImage())
         }
         return view.snapshot
           ?? Async { callback in

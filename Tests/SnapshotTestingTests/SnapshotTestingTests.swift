@@ -401,6 +401,48 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
+  func testNSViewZeroSizeFailsInsteadOfCrashing() {
+    #if os(macOS)
+      // A view that cannot be rendered is a per-assertion input problem, not a reason to take the
+      // whole test process down: it must surface as one ordinary failure, write no reference, and
+      // leave the process healthy for everything that follows.
+      let zeroSized = NSView(frame: .zero)
+
+      let failure = verifySnapshot(of: zeroSized, as: .image(scale: 2), named: "zeroSize")
+      XCTAssertNotNil(failure)
+      XCTAssertTrue(
+        failure?.contains("not renderable") == true,
+        "Expected an actionable diagnosis, got: \(failure ?? "nil")"
+      )
+
+      // The same input through the reporting path fails the test rather than crashing.
+      XCTExpectFailure("A zero-sized view is expected to fail its own assertion") {
+        assertSnapshot(of: NSView(frame: .zero), as: .image(scale: 2), named: "zeroSize")
+      }
+
+      // No reference is ever written for a diagnosed failure, in any record mode: the diagnostic
+      // is returned before both the comparison and the recording branch.
+      let referenceUrl = URL(fileURLWithPath: String(#file), isDirectory: false)
+        .deletingLastPathComponent()
+        .appendingPathComponent("__Snapshots__")
+        .appendingPathComponent("SnapshotTestingTests")
+        .appendingPathComponent("testNSViewZeroSizeFailsInsteadOfCrashing.zeroSize.png")
+      XCTAssertFalse(
+        FileManager.default.fileExists(atPath: referenceUrl.path),
+        "No reference should be recorded for a view that could not be rendered"
+      )
+
+      // The process — and the next assertion — survive.
+      let renderable = NSView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+      renderable.wantsLayer = true
+      renderable.layer?.backgroundColor = NSColor.blue.cgColor
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(renderable).run { image = $0 }
+      XCTAssertEqual(image.representations[0].pixelsWide, 20)
+      XCTAssertEqual(image.representations[0].pixelsHigh, 20)
+    #endif
+  }
+
   func testNSHostingController() {
     #if os(macOS)
       // Shapes in explicit colors rather than an SF Symbol and Text: what this asserts is the
