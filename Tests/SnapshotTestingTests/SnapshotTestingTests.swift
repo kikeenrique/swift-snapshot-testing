@@ -241,7 +241,12 @@ final class SnapshotTestingTests: BaseTestCase {
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         // Text glyph antialiasing differs across macOS point releases, so allow a small
         // perceptual tolerance on top of the pinned scale.
-        assertSnapshot(of: button, as: .image(perceptualPrecision: 0.98, scale: 2))
+        // Pin the appearance: an unpinned render follows the recording machine's system setting,
+        // and recorded in dark mode this button's title is drawn light on a light control, which
+        // produced a reference with no visible text at all.
+        assertSnapshot(
+          of: button,
+          as: .lightImage(perceptualPrecision: 0.98))
         assertSnapshot(of: button, as: .recursiveDescription)
       }
     #endif
@@ -273,13 +278,11 @@ final class SnapshotTestingTests: BaseTestCase {
       view.layer?.backgroundColor = NSColor.orange.cgColor
       view.layer?.cornerRadius = 10
       viewController.view = view
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(of: viewController, as: .image(scale: 2))
-        assertSnapshot(of: viewController, as: .recursiveDescription)
-        assertSnapshot(
-          of: viewController, as: .image(size: CGSize(width: 40.0, height: 10.0), scale: 2),
-          named: "size-override")
-      }
+      assertSnapshot(of: viewController, as: .image(scale: 2))
+      assertSnapshot(of: viewController, as: .recursiveDescription)
+      assertSnapshot(
+        of: viewController, as: .image(size: CGSize(width: 40.0, height: 10.0), scale: 2),
+        named: "size-override")
     #endif
   }
 
@@ -294,19 +297,17 @@ final class SnapshotTestingTests: BaseTestCase {
         }
       }
       let view = AppearanceView(frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(
-          of: view, as: .image(appearance: NSAppearance(named: .aqua), scale: 2), named: "light")
-        assertSnapshot(
-          of: view, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2), named: "dark")
+      assertSnapshot(
+        of: view, as: .image(appearance: NSAppearance(named: .aqua), scale: 2), named: "light")
+      assertSnapshot(
+        of: view, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2), named: "dark")
 
-        let viewController = NSViewController()
-        viewController.view = AppearanceView(
-          frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
-        assertSnapshot(
-          of: viewController, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2),
-          named: "view-controller-dark")
-      }
+      let viewController = NSViewController()
+      viewController.view = AppearanceView(
+        frame: CGRect(x: 0.0, y: 0.0, width: 20.0, height: 20.0))
+      assertSnapshot(
+        of: viewController, as: .image(appearance: NSAppearance(named: .darkAqua), scale: 2),
+        named: "view-controller-dark")
     #endif
   }
 
@@ -317,12 +318,10 @@ final class SnapshotTestingTests: BaseTestCase {
       view.wantsLayer = true
       view.layer?.backgroundColor = NSColor.blue.cgColor
       view.layer?.cornerRadius = 5
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        // Pinned scales render machine-independently: 10 pt becomes 10 px at 1x, 20 px at 2x,
-        // regardless of the host display's backing scale.
-        assertSnapshot(of: view, as: .image(scale: 1), named: "1x")
-        assertSnapshot(of: view, as: .image(scale: 2), named: "2x")
-      }
+      // Pinned scales render machine-independently: 10 pt becomes 10 px at 1x, 20 px at 2x,
+      // regardless of the host display's backing scale.
+      assertSnapshot(of: view, as: .image(scale: 1), named: "1x")
+      assertSnapshot(of: view, as: .image(scale: 2), named: "2x")
     #endif
   }
 
@@ -428,26 +427,283 @@ final class SnapshotTestingTests: BaseTestCase {
     #endif
   }
 
+  func testNSViewUnderConstraintsIsRestoredAfterPinnedScale() {
+    #if os(macOS)
+      // Detaching the view for the pinned-scale render deactivates every constraint its ancestors
+      // hold against it. Restoration must reinstate the hierarchy position, the frame, the
+      // autoresizing-translation flag, and the *same* constraint objects — so that a fresh layout
+      // pass still resolves to the pre-snapshot geometry instead of corrupting the next assertion.
+      let root = NSView(frame: CGRect(x: 0, y: 0, width: 120, height: 80))
+      root.wantsLayer = true
+      root.layer?.backgroundColor = NSColor.white.cgColor
+
+      let container = NSView()
+      container.wantsLayer = true
+      container.layer?.backgroundColor = NSColor.gray.cgColor
+      container.translatesAutoresizingMaskIntoConstraints = false
+      root.addSubview(container)
+
+      let view = NSView()
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.blue.cgColor
+      view.translatesAutoresizingMaskIntoConstraints = false
+      container.addSubview(view)
+
+      let containerConstraints = [
+        container.topAnchor.constraint(equalTo: root.topAnchor),
+        container.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+        container.widthAnchor.constraint(equalToConstant: 120),
+        container.heightAnchor.constraint(equalToConstant: 80),
+      ]
+      // Size and position constraints referencing the view, held by its superview...
+      let superviewConstraints = [
+        view.widthAnchor.constraint(equalToConstant: 40),
+        view.heightAnchor.constraint(equalToConstant: 20),
+        view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
+      ]
+      // ...and one held by a grandparent, which the save loop only finds because it walks *all*
+      // ancestors rather than just the immediate superview.
+      let grandparentConstraint = view.topAnchor.constraint(equalTo: root.topAnchor, constant: 15)
+      let viewConstraints = superviewConstraints + [grandparentConstraint]
+      NSLayoutConstraint.activate(containerConstraints + viewConstraints)
+
+      let window = NSWindow(
+        contentRect: root.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = root
+      root.layoutSubtreeIfNeeded()
+
+      let originalFrame = view.frame
+      XCTAssertEqual(originalFrame.size, CGSize(width: 40, height: 20))
+
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
+      XCTAssertEqual(image.representations[0].pixelsWide, 80)
+      XCTAssertEqual(image.representations[0].pixelsHigh, 40)
+
+      XCTAssertTrue(view.superview === container, "superview identity must be restored")
+      XCTAssertEqual(container.subviews.firstIndex(of: view), 0, "subview index must be restored")
+      XCTAssertTrue(view.window === window, "the view must be back in its original window")
+      XCTAssertEqual(view.frame, originalFrame, "frame must be restored")
+      XCTAssertFalse(
+        view.translatesAutoresizingMaskIntoConstraints,
+        "the offscreen window sets translatesAutoresizingMaskIntoConstraints; it must be restored"
+      )
+
+      // Every constraint referencing the view is still installed and active — compared by object
+      // identity, not by count, so a "restoration" that installed equivalent replacements would
+      // still fail. The walk starts at the view itself because AppKit installs a self-sizing
+      // constraint (`view.width == 40`) on the view, not on an ancestor.
+      var installed: Set<ObjectIdentifier> = []
+      var ancestor: NSView? = view
+      while let current = ancestor {
+        for constraint in current.constraints { installed.insert(ObjectIdentifier(constraint)) }
+        ancestor = current.superview
+      }
+      for constraint in viewConstraints {
+        XCTAssertTrue(
+          installed.contains(ObjectIdentifier(constraint)),
+          "constraint \(constraint) was not reinstalled on an ancestor"
+        )
+        XCTAssertTrue(constraint.isActive, "constraint \(constraint) was left inactive")
+      }
+
+      // The decisive check: the constraints still *drive* the layout to the same geometry.
+      root.layoutSubtreeIfNeeded()
+      XCTAssertEqual(
+        view.frame, originalFrame, "layout must still resolve to the pre-snapshot frame"
+      )
+
+      window.contentView = nil
+    #endif
+  }
+
+  func testNSViewInStackViewIsRestoredAfterPinnedScale() {
+    #if os(macOS)
+      // `NSStackView` tracks its children in `arrangedSubviews`, which a naive
+      // superview/index restoration re-adds as a plain subview only. Snapshotting an arranged
+      // subview must leave the stack laying out exactly as it did before.
+      func makeBox(_ color: NSColor) -> NSView {
+        let box = NSView()
+        box.wantsLayer = true
+        box.layer?.backgroundColor = color.cgColor
+        box.translatesAutoresizingMaskIntoConstraints = false
+        box.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        box.heightAnchor.constraint(equalToConstant: 10).isActive = true
+        return box
+      }
+
+      let boxes = [makeBox(.red), makeBox(.green), makeBox(.blue)]
+      let stack = NSStackView(views: boxes)
+      stack.orientation = .horizontal
+      stack.spacing = 4
+      stack.frame = CGRect(x: 0, y: 0, width: 100, height: 40)
+
+      let window = NSWindow(
+        contentRect: stack.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = stack
+      stack.layoutSubtreeIfNeeded()
+
+      let framesBefore = boxes.map(\.frame)
+      let target = boxes[1]
+
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(target).run { image = $0 }
+      XCTAssertEqual(image.representations[0].pixelsWide, 40)
+
+      XCTAssertTrue(target.superview === stack, "superview identity must be restored")
+      // Containment alone is not enough: the stack must still be managing the view, at the same
+      // arranged position it held before the snapshot.
+      XCTAssertEqual(
+        stack.arrangedSubviews.firstIndex(of: target), 1,
+        "the view must be restored as an arranged subview at its original position"
+      )
+
+      stack.layoutSubtreeIfNeeded()
+      XCTAssertEqual(
+        boxes.map(\.frame), framesBefore, "the stack must lay its children out identically"
+      )
+
+      window.contentView = nil
+    #endif
+  }
+
+  func testNSViewInWindowConsecutivePinnedScaleSnapshotsAreIdentical() {
+    #if os(macOS)
+      // The restoration round-trip must leave no residue: snapshotting the same in-window view
+      // twice back-to-back has to produce byte-identical PNGs, not merely similar-looking ones.
+      let view = NSView(frame: CGRect(x: 0, y: 0, width: 30, height: 20))
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.blue.cgColor
+      let inner = NSView(frame: CGRect(x: 5, y: 5, width: 10, height: 10))
+      inner.wantsLayer = true
+      inner.layer?.backgroundColor = NSColor.red.cgColor
+      view.addSubview(inner)
+
+      let window = NSWindow(
+        contentRect: view.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = view
+
+      func renderPNG() -> Data {
+        var image: NSImage!
+        Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
+        let rep = image.representations[0] as! NSBitmapImageRep
+        XCTAssertEqual(rep.pixelsWide, 60)
+        XCTAssertEqual(rep.pixelsHigh, 40)
+        return rep.representation(using: .png, properties: [:])!
+      }
+
+      let first = renderPNG()
+      let second = renderPNG()
+      XCTAssertEqual(
+        first, second, "a second pinned-scale render must be byte-identical to the first"
+      )
+
+      window.contentView = nil
+    #endif
+  }
+
+  func testNSViewInWindowRecursiveDescriptionSurvivesPinnedScaleSnapshot() {
+    #if os(macOS)
+      // Detaching the view dirties layout flags across its subtree; if they are not settled back
+      // down, the residue shows up as changed frames in a later `recursiveDescription` snapshot.
+      let view = NSView(frame: CGRect(x: 0, y: 0, width: 40, height: 24))
+      view.wantsLayer = true
+      view.layer?.backgroundColor = NSColor.blue.cgColor
+      let inner = NSView(frame: CGRect(x: 4, y: 4, width: 12, height: 12))
+      inner.wantsLayer = true
+      inner.layer?.backgroundColor = NSColor.red.cgColor
+      view.addSubview(inner)
+
+      let window = NSWindow(
+        contentRect: view.bounds, styleMask: [.borderless], backing: .buffered, defer: false
+      )
+      window.isReleasedWhenClosed = false
+      window.contentView = view
+
+      func describe() -> String {
+        var description: String!
+        Snapshotting<NSView, String>.recursiveDescription.snapshot(view).run { description = $0 }
+        return description
+      }
+
+      // Settle layout first, so the "before" string records a clean subtree: anything the image
+      // snapshot leaves dirty (an `L`/`l` needsLayout flag, a moved frame) then shows up as a
+      // difference rather than being masked by pre-existing dirt.
+      view.layoutSubtreeIfNeeded()
+      let before = describe()
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(view).run { image = $0 }
+      XCTAssertEqual(image.representations[0].pixelsWide, 80)
+      let after = describe()
+
+      XCTAssertEqual(
+        before, after, "a pinned-scale image snapshot must not perturb the recursive description"
+      )
+
+      window.contentView = nil
+    #endif
+  }
+
+  func testNSViewZeroSizeFailsInsteadOfCrashing() {
+    #if os(macOS)
+      // A view that cannot be rendered is a per-assertion input problem, not a reason to take the
+      // whole test process down: it must surface as one ordinary failure, write no reference, and
+      // leave the process healthy for everything that follows.
+      let zeroSized = NSView(frame: .zero)
+
+      let failure = verifySnapshot(of: zeroSized, as: .image(scale: 2), named: "zeroSize")
+      XCTAssertNotNil(failure)
+      XCTAssertTrue(
+        failure?.contains("not renderable") == true,
+        "Expected an actionable diagnosis, got: \(failure ?? "nil")"
+      )
+
+      // The same input through the reporting path fails the test rather than crashing.
+      XCTExpectFailure("A zero-sized view is expected to fail its own assertion") {
+        assertSnapshot(of: NSView(frame: .zero), as: .image(scale: 2), named: "zeroSize")
+      }
+
+      // No reference is ever written for a diagnosed failure, in any record mode: the diagnostic
+      // is returned before both the comparison and the recording branch.
+      let referenceUrl = URL(fileURLWithPath: String(#file), isDirectory: false)
+        .deletingLastPathComponent()
+        .appendingPathComponent("__Snapshots__")
+        .appendingPathComponent("SnapshotTestingTests")
+        .appendingPathComponent("testNSViewZeroSizeFailsInsteadOfCrashing.zeroSize.png")
+      XCTAssertFalse(
+        FileManager.default.fileExists(atPath: referenceUrl.path),
+        "No reference should be recorded for a view that could not be rendered"
+      )
+
+      // The process — and the next assertion — survive.
+      let renderable = NSView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+      renderable.wantsLayer = true
+      renderable.layer?.backgroundColor = NSColor.blue.cgColor
+      var image: NSImage!
+      Snapshotting<NSView, NSImage>.image(scale: 2).snapshot(renderable).run { image = $0 }
+      XCTAssertEqual(image.representations[0].pixelsWide, 20)
+      XCTAssertEqual(image.representations[0].pixelsHigh, 20)
+    #endif
+  }
+
   func testNSHostingController() {
     #if os(macOS)
-      struct MyView: SwiftUI.View {
-        var body: some SwiftUI.View {
-          HStack {
-            Image(systemName: "checkmark.circle.fill")
-            Text("Checked").fixedSize()
-          }
-          .padding(5)
-          .background(RoundedRectangle(cornerRadius: 5.0).fill(Color.blue))
-          .padding(10)
-        }
-      }
-      let controller = NSHostingController(rootView: MyView().background(Color.yellow))
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        assertSnapshot(
-          of: controller,
-          as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2)
-        )
-      }
+      // Shapes in explicit colors rather than an SF Symbol and Text: what this asserts is the
+      // hosting strategy's own behavior (size override, pinned scale), and system glyphs, symbols,
+      // and semantic colors like Color.yellow are drawn by the OS, so their rasterization moves
+      // between releases and the reference stops being portable.
+      let controller = NSHostingController(
+        rootView: swiftUIProbe.background(Color(red: 1.0, green: 0.8, blue: 0.0)))
+      assertSnapshot(
+        of: controller,
+        as: .image(perceptualPrecision: 0.98, size: CGSize(width: 200.0, height: 100.0), scale: 2)
+      )
     #endif
   }
 
@@ -477,8 +733,8 @@ final class SnapshotTestingTests: BaseTestCase {
           let strategy: Snapshotting<UIView, UIImage> = .image(
             precision: 0.9, traits: visionOSLightTraits)
         #elseif os(macOS)
-          let strategy: Snapshotting<NSView, NSImage> = .image(
-            precision: 0.9, perceptualPrecision: 0.98, scale: 2)
+          let strategy: Snapshotting<NSView, NSImage> = .lightImage(
+            precision: 0.9, perceptualPrecision: 0.98)
         #else
           let strategy: Snapshotting<UIView, UIImage> = .image(precision: 0.9)
         #endif
@@ -1763,45 +2019,33 @@ final class SnapshotTestingTests: BaseTestCase {
 
   #if os(macOS)
     func testSwiftUIView_macOS() {
-      struct MyView: SwiftUI.View {
-        var body: some SwiftUI.View {
-          HStack {
-            Image(systemName: "checkmark.circle.fill")
-            Text("Checked").fixedSize()
-          }
-          .padding(5)
-          .background(RoundedRectangle(cornerRadius: 5.0).fill(Color.blue))
-          .padding(10)
-        }
-      }
-      let view = MyView().background(Color.yellow)
+      // Fixed color, not Color.yellow: semantic colors are retuned across OS releases (macOS 26.5
+      // draws yellow as (255,204,0), 26.6 as (255,214,1)), which busts the reference beyond even
+      // perceptual tolerance while the library's own behavior is unchanged.
+      let view = swiftUIProbe.background(Color(red: 1.0, green: 0.8, blue: 0.0))
 
-      if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
-        // Text glyph antialiasing differs across macOS point releases, so allow a small
-        // perceptual tolerance on top of the pinned scale.
-        assertSnapshot(of: view, as: .image(perceptualPrecision: 0.98, scale: 2))
+      assertSnapshot(of: view, as: .image(perceptualPrecision: 0.98, scale: 2))
+      assertSnapshot(
+        of: view, as: .image(perceptualPrecision: 0.98, layout: .sizeThatFits, scale: 2),
+        named: "size-that-fits")
+      assertSnapshot(
+        of: view,
+        as: .image(
+          perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0), scale: 2),
+        named: "fixed")
+
+      // System colors resolve against the effective appearance, so the two renders must differ.
+      if #available(macOS 12.0, *) {
+        let appearanceView = swiftUIProbe.background(Color(nsColor: .windowBackgroundColor))
         assertSnapshot(
-          of: view, as: .image(perceptualPrecision: 0.98, layout: .sizeThatFits, scale: 2),
-          named: "size-that-fits")
+          of: appearanceView,
+          as: .image(perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua), scale: 2),
+          named: "light")
         assertSnapshot(
-          of: view,
+          of: appearanceView,
           as: .image(
-            perceptualPrecision: 0.98, layout: .fixed(width: 300.0, height: 100.0), scale: 2),
-          named: "fixed")
-
-        // System colors resolve against the effective appearance, so the two renders must differ.
-        if #available(macOS 12.0, *) {
-          let appearanceView = MyView().background(Color(nsColor: .windowBackgroundColor))
-          assertSnapshot(
-            of: appearanceView,
-            as: .image(perceptualPrecision: 0.98, appearance: NSAppearance(named: .aqua), scale: 2),
-            named: "light")
-          assertSnapshot(
-            of: appearanceView,
-            as: .image(
-              perceptualPrecision: 0.98, appearance: NSAppearance(named: .darkAqua), scale: 2),
-            named: "dark")
-        }
+            perceptualPrecision: 0.98, appearance: NSAppearance(named: .darkAqua), scale: 2),
+          named: "dark")
       }
     }
   #endif
