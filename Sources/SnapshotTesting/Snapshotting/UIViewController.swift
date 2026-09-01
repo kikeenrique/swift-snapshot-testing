@@ -109,7 +109,7 @@
     /// ```
     public static var hierarchy: Snapshotting {
       return Snapshotting<String, String>.lines.pullback { viewController in
-        let dispose = prepareView(
+        let (dispose, _) = prepareView(
           config: .init(),
           drawHierarchyInKeyWindow: false,
           traits: .init(),
@@ -145,7 +145,7 @@
       -> Snapshotting<UIViewController, String>
     {
       return SimplySnapshotting.lines.pullback { viewController in
-        let dispose = prepareView(
+        let (dispose, _) = prepareView(
           config: .init(
             safeArea: config.safeArea, size: size ?? config.size, traits: config.traits),
           drawHierarchyInKeyWindow: false,
