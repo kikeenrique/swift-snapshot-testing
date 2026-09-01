@@ -78,7 +78,7 @@
       -> Snapshotting<UIView, String>
     {
       return SimplySnapshotting.lines.pullback { view in
-        let dispose = prepareView(
+        let (dispose, _) = prepareView(
           config: .init(safeArea: .zero, size: size ?? view.frame.size, traits: traits),
           drawHierarchyInKeyWindow: false,
           traits: .init(),

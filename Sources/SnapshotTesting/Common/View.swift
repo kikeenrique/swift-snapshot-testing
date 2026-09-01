@@ -1055,7 +1055,7 @@
       traits: UITraitCollection,
       view: UIView,
       viewController: UIViewController
-    ) -> () -> Void {
+    ) -> (dispose: () -> Void, usedKeyWindow: Bool) {
       let size = config.size ?? viewController.view.frame.size
       view.frame.size = size
       if view != viewController.view {
@@ -1064,17 +1064,32 @@
       }
       let traits = UITraitCollection(traitsFrom: [config.traits, traits])
       let window: UIWindow
-      if drawHierarchyInKeyWindow {
-        guard let keyWindow = getKeyWindow() else {
-          fatalError("'drawHierarchyInKeyWindow' requires tests to be run in a host application")
-        }
+      let usedKeyWindow: Bool
+      if drawHierarchyInKeyWindow, let keyWindow = getKeyWindow() {
         window = keyWindow
         window.frame.size = size
+        usedKeyWindow = true
       } else {
+        if drawHierarchyInKeyWindow {
+          // A missing key window used to be a `fatalError`, which killed every test in the
+          // bundle rather than failing the one that asked for the flag. Record a failure against
+          // the current test and fall back to a host-less window and `layer.render`, so the rest
+          // of the suite still runs and the attached image shows the layout instead of a black
+          // frame.
+          recordIssue(
+            """
+            'drawHierarchyInKeyWindow' requires tests to be run in a host application. \
+            This capture fell back to a host-less window rendered with 'layer.render': the test \
+            FAILS instead of crashing the whole bundle.
+            """,
+            fileID: #fileID, filePath: #filePath, line: #line, column: #column
+          )
+        }
         window = Window(
           config: .init(safeArea: config.safeArea, size: config.size ?? size, traits: traits),
           viewController: viewController
         )
+        usedKeyWindow = false
       }
       let dispose = add(traits: traits, viewController: viewController, to: window)
 
@@ -1085,7 +1100,7 @@
         view.layoutIfNeeded()
       }
 
-      return dispose
+      return (dispose, usedKeyWindow)
     }
 
     func snapshotView(
@@ -1098,7 +1113,7 @@
       -> Async<UIImage>
     {
       let initialFrame = view.frame
-      let dispose = prepareView(
+      let (dispose, usedKeyWindow) = prepareView(
         config: config,
         drawHierarchyInKeyWindow: drawHierarchyInKeyWindow,
         traits: traits,
@@ -1114,8 +1129,23 @@
           addImagesForRenderedViews(view).sequence().run { views in
             callback(
               renderer(bounds: view.bounds, for: traits).image { ctx in
-                if drawHierarchyInKeyWindow {
-                  view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+                if usedKeyWindow {
+                  // Apple documents `false` as "missing image data for any view in the
+                  // hierarchy" — observed as an entirely black frame. Unchecked, that frame is
+                  // silently comparable AND recordable as a reference, so surface it as a test
+                  // failure instead.
+                  let rendered = view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+                  if !rendered {
+                    recordIssue(
+                      """
+                      `drawHierarchy(in:afterScreenUpdates:)` returned false — the capture is \
+                      missing image data for at least one view (typically an entirely black \
+                      frame). The snapshot is not a faithful render; failing instead of \
+                      comparing or recording it.
+                      """,
+                      fileID: #fileID, filePath: #filePath, line: #line, column: #column
+                    )
+                  }
                 } else {
                   view.layer.render(in: ctx.cgContext)
                 }

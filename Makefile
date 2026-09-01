@@ -24,6 +24,13 @@ test-ios:
 		-scheme SnapshotTesting \
 		-destination platform="iOS Simulator,name=iPhone 11 Pro Max,OS=13.3"
 
+test-app:
+	set -o pipefail && \
+	xcodebuild test \
+		-project TestsApp/HostApp.xcodeproj \
+		-scheme HostApp \
+		-destination platform="iOS Simulator,name=iPhone 17 Pro"
+
 test-swift:
 	swift test
 
@@ -45,6 +52,6 @@ format:
 		--ignore-unparsable-files \
 		--in-place \
 		--recursive \
-		./Package.swift ./Sources ./Tests
+		./Package.swift ./Sources ./Tests ./TestsApp
 
 test-all: test-linux test-macos test-ios test-visionos
