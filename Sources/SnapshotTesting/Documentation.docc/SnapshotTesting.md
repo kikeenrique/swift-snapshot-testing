@@ -10,6 +10,7 @@ Powerfully flexible snapshot testing.
 - <doc:IntegratingWithTestFrameworks>
 - <doc:VisionOS>
 - <doc:VisualEffects>
+- <doc:ReadingPrecisionFailures>
 - <doc:MigrationGuides>
 
 ### Strategies

@@ -66,7 +66,8 @@
     let pixelCount = old.width * old.height
     let byteCount = imageContextBytesPerPixel * pixelCount
     var oldBytes = [UInt8](repeating: 0, count: byteCount)
-    guard let oldData = imageContext(for: old, data: &oldBytes)?.data else {
+    guard let oldContext = imageContext(for: old, data: &oldBytes), let oldData = oldContext.data
+    else {
       return "Reference image's data could not be loaded."
     }
     if let newContext = imageContext(for: new), let newData = newContext.data {
@@ -85,9 +86,21 @@
       return "Newly-taken snapshot does not match reference."
     }
     if perceptualPrecision < 1, #available(iOS 11.0, tvOS 11.0, macOS 10.13, *) {
+      // The perceptual comparison below runs with color management disabled, so it compares raw
+      // component values and both images must already be in the same color space. A reference
+      // decoded from PNG and a freshly rendered snapshot routinely are not: on iOS a
+      // `UIGraphicsImageRenderer` render is extended-sRGB 16-bit float, while its own PNG round
+      // trip decodes as Display P3 16-bit integer. Left un-normalized, every saturated pixel reads
+      // as a large delta E even when nothing on screen has changed. These are the very buffers the
+      // byte comparison above disagreed on.
+      guard let oldNormalized = oldContext.makeImage(),
+        let newNormalized = newerContext.makeImage()
+      else {
+        return "Newly-taken snapshot's data could not be processed."
+      }
       return perceptuallyCompare(
-        CIImage(cgImage: old),
-        CIImage(cgImage: new),
+        CIImage(cgImage: oldNormalized),
+        CIImage(cgImage: newNormalized),
         pixelPrecision: precision,
         perceptualPrecision: perceptualPrecision
       )
@@ -302,11 +315,13 @@
     }
 
     func applyingAreaAverage() -> CIImage {
-      applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: extent])
+      // The extent is a `CIVector` parameter. Passing a `CGRect` only works where it happens to
+      // bridge to an `NSValue` the filter can read.
+      applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
     }
 
     func applyingAreaMaximum() -> CIImage {
-      applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: extent])
+      applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
     }
 
     func renderSingleValue(in context: CIContext) -> Float? {
