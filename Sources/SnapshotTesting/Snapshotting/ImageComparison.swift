@@ -33,6 +33,31 @@
     return context
   }
 
+  let imageContextWideBitsPerComponent = 16
+  let imageContextWideBytesPerPixel = 8
+
+  /// Draws `cgImage` into a normalized sRGB / 16-bpc / 8-bpp / premultiplied-last context, so that
+  /// two images of any bit depth or color space can be differenced in the same space at a precision
+  /// finer than a single 8-bit code point.
+  func wideImageContext(for cgImage: CGImage, data: UnsafeMutableRawPointer) -> CGContext? {
+    guard
+      let colorSpace = imageContextColorSpace,
+      let context = CGContext(
+        data: data,
+        width: cgImage.width,
+        height: cgImage.height,
+        bitsPerComponent: imageContextWideBitsPerComponent,
+        bytesPerRow: cgImage.width * imageContextWideBytesPerPixel,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+          | CGBitmapInfo.byteOrder16Little.rawValue
+      )
+    else { return nil }
+
+    context.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+    return context
+  }
+
   // MARK: - Compare
 
   /// The platform-neutral image comparison core shared by the `UIImage` and `NSImage` strategies.
@@ -115,21 +140,14 @@
 
   // MARK: - Diff
 
-  /// Produces a single-channel image whose brightness is the contrast-stretched per-pixel maximum
-  /// component difference between `old` and `new`.
+  /// Produces a single-channel image whose brightness is the per-pixel maximum component difference
+  /// between `old` and `new`, normalized against the largest difference in the image.
   ///
-  /// Both images must already be 8-bits-per-component, 4-bytes-per-pixel and unpadded; callers that
-  /// cannot guarantee that fall back to their platform's blend-mode diff.
+  /// Both images are redrawn into a shared 16-bits-per-component sRGB buffer, so they may be of any
+  /// bit depth or color space, and a difference smaller than a single 8-bit code point still shows
+  /// up in the output.
   func normalizedComponentDiff(_ old: CGImage, _ new: CGImage) -> CGImage? {
-    guard old.width == new.width,
-      old.height == new.height,
-      old.bitsPerComponent == imageContextBitsPerComponent,
-      new.bitsPerComponent == imageContextBitsPerComponent,
-      old.bytesPerRow == old.width * imageContextBytesPerPixel,
-      new.bytesPerRow == new.width * imageContextBytesPerPixel,
-      let oldData = old.dataProvider?.data,
-      let newData = new.dataProvider?.data
-    else {
+    guard old.width == new.width, old.height == new.height else {
       return nil
     }
 
@@ -147,33 +165,59 @@
     let width = old.width
     let height = old.height
     let pixelCount = width * height
+    guard pixelCount > 0 else { return nil }
+    let componentCount = pixelCount * imageContextBytesPerPixel
 
-    let oldBytes = CFDataGetBytePtr(oldData)!
-    let newBytes = CFDataGetBytePtr(newData)!
-    var diffBytes = [UInt8](repeating: 0, count: pixelCount)
+    var oldComponents = [UInt16](repeating: 0, count: componentCount)
+    var newComponents = [UInt16](repeating: 0, count: componentCount)
+    guard wideImageContext(for: old, data: &oldComponents) != nil,
+      wideImageContext(for: new, data: &newComponents) != nil
+    else {
+      return nil
+    }
 
+    var diffComponents = [UInt16](repeating: 0, count: pixelCount)
+    var maximumDiff: UInt16 = 0
+
+    // NB: We are purposely using a verbose 'while' loop instead of a 'for in' loop.  When the
+    //     compiler doesn't have optimizations enabled, like in test targets, a `while` loop is
+    //     significantly faster than a `for` loop for iterating through the elements of a memory
+    //     buffer. Details can be found in [SR-6983](https://github.com/apple/swift/issues/49531)
     var index = 0
     while index < pixelCount {
       defer { index += 1 }
       let pixelOffset = index * imageContextBytesPerPixel
 
-      let rOld = Int16(oldBytes[pixelOffset])
-      let gOld = Int16(oldBytes[pixelOffset + 1])
-      let bOld = Int16(oldBytes[pixelOffset + 2])
-      let aOld = Int16(oldBytes[pixelOffset + 3])
+      var maxDiff: UInt16 = 0
+      var component = 0
+      while component < imageContextBytesPerPixel {
+        defer { component += 1 }
+        let oldComponent = oldComponents[pixelOffset + component]
+        let newComponent = newComponents[pixelOffset + component]
+        let diff =
+          oldComponent > newComponent
+          ? oldComponent - newComponent
+          : newComponent - oldComponent
+        if diff > maxDiff {
+          maxDiff = diff
+        }
+      }
 
-      let rNew = Int16(newBytes[pixelOffset])
-      let gNew = Int16(newBytes[pixelOffset + 1])
-      let bNew = Int16(newBytes[pixelOffset + 2])
-      let aNew = Int16(newBytes[pixelOffset + 3])
+      diffComponents[index] = maxDiff
+      if maxDiff > maximumDiff {
+        maximumDiff = maxDiff
+      }
+    }
 
-      let rDiff = abs(rOld - rNew)
-      let gDiff = abs(gOld - gNew)
-      let bDiff = abs(bOld - bNew)
-      let aDiff = abs(aOld - aNew)
+    guard maximumDiff > 0 else { return nil }
 
-      let maxDiff = max(rDiff, gDiff, bDiff, aDiff)
-      diffBytes[index] = UInt8(maxDiff)
+    // Normalize against the largest difference in the image so that a difference of a fraction of
+    // an 8-bit code point is still visible in the attachment.
+    var diffBytes = [UInt8](repeating: 0, count: pixelCount)
+    index = 0
+    while index < pixelCount {
+      defer { index += 1 }
+      diffBytes[index] = UInt8(Int(diffComponents[index]) * 255 / Int(maximumDiff))
     }
 
     return diffBytes.withUnsafeMutableBytes { diffPtr in
@@ -232,11 +276,14 @@
       // Fast path - Metal processing
       guard
         let thresholdOutputImage = try? deltaOutputImage.applyingThreshold(deltaThreshold),
-        let averagePixel = thresholdOutputImage.applyingAreaAverage().renderSingleValue(in: context)
+        let failingPixelCount = thresholdOutputImage.countingNonZeroPixels(in: context)
       else {
         return "Newly-taken snapshot's data could not be processed."
       }
-      actualPixelPrecision = 1 - averagePixel
+      let failingPixelPercent =
+        Float(failingPixelCount)
+        / Float(deltaOutputImage.extent.width * deltaOutputImage.extent.height)
+      actualPixelPrecision = 1 - failingPixelPercent
       if actualPixelPrecision < pixelPrecision {
         maximumDeltaE = deltaOutputImage.applyingAreaMaximum().renderSingleValue(in: context) ?? 0
       }
@@ -301,12 +348,46 @@
       )
     }
 
-    func applyingAreaAverage() -> CIImage {
-      applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: extent])
+    func applyingAreaMaximum() -> CIImage {
+      // The extent is a `CIVector` parameter. Passing a `CGRect` only works where it happens to
+      // bridge to an `NSValue` the filter can read, and raises `-[NSConcreteValue CGRectValue]:
+      // unrecognized selector` elsewhere.
+      applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
     }
 
-    func applyingAreaMaximum() -> CIImage {
-      applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: extent])
+    /// The number of pixels of a thresholded image that are not zero, i.e. the number of failing
+    /// pixels.
+    ///
+    /// NB: This used to be derived from `CIAreaAverage`, whose single-value result is read back
+    ///     through a 1x1 half-float render. That quantizes the fraction to `Float16` and, on some
+    ///     Core Image back ends, averages over less than the full extent, which inflates the
+    ///     reported failing-pixel fraction. Counting the thresholded pixels keeps it exact.
+    func countingNonZeroPixels(in context: CIContext) -> Int? {
+      guard let buffer = render(in: context) else { return nil }
+      defer { buffer.free() }
+      var nonZeroPixelCount = 0
+      // rowBytes must be a multiple of 8, so vImage_Buffer pads the end of each row with bytes to meet the multiple of 0 requirement.
+      // We must do 2D iteration of the vImage_Buffer in order to avoid loading the padding garbage bytes at the end of each row.
+      //
+      // NB: We are purposely using a verbose 'while' loop instead of a 'for in' loop.  When the
+      //     compiler doesn't have optimizations enabled, like in test targets, a `while` loop is
+      //     significantly faster than a `for` loop for iterating through the elements of a memory
+      //     buffer. Details can be found in [SR-6983](https://github.com/apple/swift/issues/49531)
+      let componentStride = MemoryLayout<Float>.stride
+      var line = 0
+      while line < buffer.height {
+        defer { line += 1 }
+        let lineOffset = buffer.rowBytes * line
+        var column = 0
+        while column < buffer.width {
+          defer { column += 1 }
+          let byteOffset = lineOffset + column * componentStride
+          if buffer.data.load(fromByteOffset: byteOffset, as: Float.self) > 0 {
+            nonZeroPixelCount += 1
+          }
+        }
+      }
+      return nonZeroPixelCount
     }
 
     func renderSingleValue(in context: CIContext) -> Float? {
