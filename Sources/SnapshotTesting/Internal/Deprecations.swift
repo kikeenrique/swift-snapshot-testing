@@ -555,8 +555,8 @@ public typealias SnapshotTestCase = XCTestCase
 
 @available(
   *,
-   deprecated,
-   message:
+  deprecated,
+  message:
     "Use 'withSnapshotTesting' to customize the record mode. See the documentation for more information."
 )
 public var record: Bool {
