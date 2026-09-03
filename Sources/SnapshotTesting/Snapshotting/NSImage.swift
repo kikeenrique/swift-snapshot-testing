@@ -104,9 +104,20 @@
       return "Newly-taken snapshot does not match reference."
     }
     if perceptualPrecision < 1, #available(macOS 10.13, *) {
+      // The perceptual comparison below runs with color management disabled, so it compares raw
+      // component values and both images must already be in the same color space. `context(for:)`
+      // deliberately preserves each image's own space and bit depth for the byte comparison, so
+      // the two must be normalized separately here; left un-normalized, every saturated pixel
+      // reads as a large delta E even when nothing on screen has changed.
+      guard
+        let oldNormalizedCgImage = normalizedContext(for: oldCgImage)?.makeImage(),
+        let newNormalizedCgImage = normalizedContext(for: newerCgImage)?.makeImage()
+      else {
+        return "Newly-taken snapshot's data could not be processed."
+      }
       return perceptuallyCompare(
-        CIImage(cgImage: oldCgImage),
-        CIImage(cgImage: newCgImage),
+        CIImage(cgImage: oldNormalizedCgImage),
+        CIImage(cgImage: newNormalizedCgImage),
         pixelPrecision: precision,
         perceptualPrecision: perceptualPrecision
       )
@@ -132,6 +143,26 @@
       }
     }
     return nil
+  }
+
+  /// Draws `cgImage` into an sRGB / 8-bpc / 4-bpp / premultiplied-last context, so that two images
+  /// originating from different color spaces or bit depths can be compared component by component.
+  private func normalizedContext(for cgImage: CGImage) -> CGContext? {
+    guard
+      let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+      let context = CGContext(
+        data: nil,
+        width: cgImage.width,
+        height: cgImage.height,
+        bitsPerComponent: 8,
+        bytesPerRow: cgImage.width * 4,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+      )
+    else { return nil }
+
+    context.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+    return context
   }
 
   private func context(for cgImage: CGImage) -> CGContext? {

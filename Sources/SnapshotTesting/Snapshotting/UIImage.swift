@@ -130,9 +130,21 @@
       return "Newly-taken snapshot does not match reference."
     }
     if perceptualPrecision < 1, #available(iOS 11.0, tvOS 11.0, *) {
+      // The perceptual comparison below runs with color management disabled, so it compares raw
+      // component values and both images must already be in the same color space. A reference
+      // decoded from PNG and a freshly rendered snapshot routinely are not: on iOS a
+      // `UIGraphicsImageRenderer` render is extended-sRGB 16-bit float, while its own PNG round
+      // trip decodes as Display P3 16-bit integer. Left un-normalized, every saturated pixel
+      // reads as a large delta E even when nothing on screen has changed.
+      guard
+        let oldNormalizedCgImage = context(for: oldCgImage)?.makeImage(),
+        let newNormalizedCgImage = context(for: newerCgImage)?.makeImage()
+      else {
+        return "Newly-taken snapshot's data could not be processed."
+      }
       return perceptuallyCompare(
-        CIImage(cgImage: oldCgImage),
-        CIImage(cgImage: newCgImage),
+        CIImage(cgImage: oldNormalizedCgImage),
+        CIImage(cgImage: newNormalizedCgImage),
         pixelPrecision: precision,
         perceptualPrecision: perceptualPrecision
       )
@@ -384,11 +396,13 @@ private func normalizedComponentDiff(_ old: UIImage, _ new: UIImage) -> UIImage?
     }
 
     func applyingAreaAverage() -> CIImage {
-      applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: extent])
+      // The extent is a `CIVector` parameter. Passing a `CGRect` only works where it happens to
+      // bridge to an `NSValue` the filter can read.
+      applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
     }
 
     func applyingAreaMaximum() -> CIImage {
-      applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: extent])
+      applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
     }
 
     func renderSingleValue(in context: CIContext) -> Float? {
