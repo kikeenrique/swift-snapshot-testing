@@ -10,6 +10,7 @@
 		1A0000000000000000000019 /* HostApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000018 /* HostApp.swift */; };
 		1A0000000000000000000029 /* PixelSampling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000028 /* PixelSampling.swift */; };
 		1A000000000000000000002B /* DrawHierarchyInKeyWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000002A /* DrawHierarchyInKeyWindowTests.swift */; };
+		1A000000000000000000002F /* PerceptualComparisonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000002E /* PerceptualComparisonTests.swift */; };
 		1A0000000000000000000042 /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000041 /* SnapshotTesting */; };
 /* End PBXBuildFile section */
 
@@ -29,6 +30,7 @@
 		1A0000000000000000000021 /* HostAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HostAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000028 /* PixelSampling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelSampling.swift; sourceTree = "<group>"; };
 		1A000000000000000000002A /* DrawHierarchyInKeyWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawHierarchyInKeyWindowTests.swift; sourceTree = "<group>"; };
+		1A000000000000000000002E /* PerceptualComparisonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerceptualComparisonTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +83,7 @@
 			children = (
 				1A000000000000000000002A /* DrawHierarchyInKeyWindowTests.swift */,
 				1A0000000000000000000028 /* PixelSampling.swift */,
+				1A000000000000000000002E /* PerceptualComparisonTests.swift */,
 			);
 			path = HostAppTests;
 			sourceTree = "<group>";
@@ -198,6 +201,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A000000000000000000002B /* DrawHierarchyInKeyWindowTests.swift in Sources */,
+				1A000000000000000000002F /* PerceptualComparisonTests.swift in Sources */,
 				1A0000000000000000000029 /* PixelSampling.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
