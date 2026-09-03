@@ -3,26 +3,44 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - "*"
   pull_request:
     branches:
       - "*"
+  workflow_dispatch:
 
 jobs:
   macos:
     strategy:
       matrix:
         xcode:
-          - '16.4'
+          - '26.6'
 
     name: macOS
-    runs-on: macos-15
+    # The runner OS must match the OS the references were recorded on: AppKit/SwiftUI/WebKit draw
+    # with the host OS (system colors, control internals, glyphs), so a macos-15 runner can never
+    # match macOS 26-recorded references, whatever the toolchain.
+    runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.xcode }}
         run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+      # xcodebuild rather than `swift test`: only xcodebuild collects the library's
+      # reference/failure/difference image attachments, so a red image assert is readable from the
+      # uploaded bundle instead of a bare "Snapshot does not match".
       - name: Run tests
-        run: make test-swift
+        run: make test-macos RESULT_BUNDLE=TestResults.xcresult
+      # record: .failed overwrites the checked-out references with the CI render before the job
+      # ends, so the uploaded __Snapshots__ tree is what this runner drew; the bundle's attachments
+      # are built beforehand and keep the original diff.
+      - name: Upload result bundle and CI-rendered snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-xcresult
+          path: |
+            TestResults.xcresult
+            Tests/SnapshotTestingTests/__Snapshots__
 
   ubuntu:
     strategy:
@@ -34,7 +52,7 @@ jobs:
     name: Linux (Swift ${{ matrix.swift }})
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: swift test
 
   android:
@@ -45,8 +63,11 @@ jobs:
     name: Android
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: skiptools/swift-android-action@v2
         with:
           swift-version: ${{ matrix.swift }}
           copy-files: ${GITHUB_WORKSPACE}/Tests/SnapshotTestingTests/__Snapshots__
+          # AssertSnapshot.swift hardcodes this path for os(Android); the
+          # action's default changed to swift-android-tests in v2.9.5.
+          android-emulator-test-folder: /data/local/tmp/android-xctest
