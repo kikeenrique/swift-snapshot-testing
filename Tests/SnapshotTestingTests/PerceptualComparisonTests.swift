@@ -69,6 +69,38 @@
       XCTAssertGreaterThan(maximum, 0)
     }
 
+    /// A reference and a snapshot need not share a color space: on iOS a `UIGraphicsImageRenderer`
+    /// render is extended-sRGB 16-bit float while its own PNG round trip decodes as Display P3
+    /// 16-bit integer. The perceptual comparison runs with color management disabled, so comparing
+    /// them as they arrive reads every saturated pixel as a large Delta E. `compareCore` must
+    /// compare the normalized buffers instead, and report only the pixels that actually differ.
+    func testColorSpaceMismatchDoesNotCountAsFailingPixels() throws {
+      let width = 600
+      let height = 400
+      let totalPixelCount = width * height
+      // The altered pixel sits inside the saturated block, where a color-space shift is largest.
+      let alteredPixel = totalPixelCount / 2 + width / 2
+      let old = try makeSaturatedImage(width: width, height: height, alteredPixel: nil)
+      let altered = try makeSaturatedImage(
+        width: width, height: height, alteredPixel: alteredPixel)
+      let new = try makeWideDisplayP3Copy(of: altered)
+
+      let message = try XCTUnwrap(
+        compareCore(
+          old,
+          new,
+          oldSize: CGSize(width: width, height: height),
+          newSize: CGSize(width: width, height: height),
+          precision: 1,
+          perceptualPrecision: 0.98,
+          pngRoundTrip: { new }
+        )
+      )
+      let actual = try actualPixelPrecision(in: message)
+      XCTAssertEqual(actual, 1 - 1 / Float(totalPixelCount), accuracy: 1e-7)
+      XCTAssertEqual(Int((Float(totalPixelCount) * (1 - actual)).rounded()), 1)
+    }
+
     /// A 16-bit-per-component pair whose difference is smaller than one 8-bit code point must still
     /// produce a visible difference image, at the pixels that actually differ.
     func testDifferenceOfSixteenBitImagesIsNotBlank() throws {
@@ -146,6 +178,48 @@
           intent: .defaultIntent
         )
       )
+    }
+
+    /// A white field with a saturated olive block over its lower half, optionally with one pixel
+    /// turned black. sRGB, 8 bits per component.
+    private func makeSaturatedImage(
+      width: Int, height: Int, alteredPixel: Int?
+    ) throws -> CGImage {
+      let pixelCount = width * height
+      var bytes = [UInt8](repeating: 255, count: pixelCount * 4)
+      var index = pixelCount / 2
+      while index < pixelCount {
+        defer { index += 1 }
+        bytes[index * 4] = 128
+        bytes[index * 4 + 1] = 140
+        bytes[index * 4 + 2] = 25
+      }
+      if let alteredPixel {
+        bytes[alteredPixel * 4] = 0
+        bytes[alteredPixel * 4 + 1] = 0
+        bytes[alteredPixel * 4 + 2] = 0
+      }
+      return try makeCGImage(bytes, width: width, height: height)
+    }
+
+    /// The same content, properly color-converted into Display P3 at 16 bits per component.
+    private func makeWideDisplayP3Copy(of cgImage: CGImage) throws -> CGImage {
+      let width = cgImage.width
+      let height = cgImage.height
+      let context = try XCTUnwrap(
+        CGContext(
+          data: nil,
+          width: width,
+          height: height,
+          bitsPerComponent: 16,
+          bytesPerRow: width * 8,
+          space: XCTUnwrap(CGColorSpace(name: CGColorSpace.displayP3)),
+          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            | CGBitmapInfo.byteOrder16Little.rawValue
+        )
+      )
+      context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return try XCTUnwrap(context.makeImage())
     }
 
     private func makeSixteenBitImagePair(

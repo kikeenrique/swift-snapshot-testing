@@ -91,7 +91,8 @@
     let pixelCount = old.width * old.height
     let byteCount = imageContextBytesPerPixel * pixelCount
     var oldBytes = [UInt8](repeating: 0, count: byteCount)
-    guard let oldData = imageContext(for: old, data: &oldBytes)?.data else {
+    guard let oldContext = imageContext(for: old, data: &oldBytes), let oldData = oldContext.data
+    else {
       return "Reference image's data could not be loaded."
     }
     if let newContext = imageContext(for: new), let newData = newContext.data {
@@ -110,9 +111,21 @@
       return "Newly-taken snapshot does not match reference."
     }
     if perceptualPrecision < 1, #available(iOS 11.0, tvOS 11.0, macOS 10.13, *) {
+      // NB: `old` and `new` need not share a color space, a bit depth or an alpha layout. A
+      //     reference decoded from PNG and a freshly rendered snapshot routinely do not: on iOS a
+      //     `UIGraphicsImageRenderer` render is extended-sRGB 16-bit float, while its own PNG
+      //     round trip decodes as Display P3 16-bit integer. The perceptual comparison runs with
+      //     color management disabled, so it compares raw component values and must be handed
+      //     images that are already in the same space, or every saturated pixel reads as a large
+      //     Delta E. These are the very buffers the byte comparison above disagreed on.
+      guard let oldNormalized = oldContext.makeImage(),
+        let newNormalized = newerContext.makeImage()
+      else {
+        return "Newly-taken snapshot's data could not be processed."
+      }
       return perceptuallyCompare(
-        CIImage(cgImage: old),
-        CIImage(cgImage: new),
+        CIImage(cgImage: oldNormalized),
+        CIImage(cgImage: newNormalized),
         pixelPrecision: precision,
         perceptualPrecision: perceptualPrecision
       )
