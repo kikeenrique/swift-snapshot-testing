@@ -64,27 +64,23 @@ color on the other side of the edge, which is a large Delta E on a tiny number o
 ## When the failure is not a content change
 
 A perceptual failure can also mean the two images were never compared in the same color space.
-The comparison runs `CILabDeltaE` with color management switched off, so it reads raw component
-values; if the reference and the snapshot carry different color spaces, the same color is a large
-Delta E in both directions even though nothing on screen moved.
+On iOS a `UIGraphicsImageRenderer` render is extended sRGB, 16 bits per component, floating
+point; its own PNG round trip — the reference as it is written to disk and decoded back — is
+Display P3, 16 bits per component, integer. The perceptual comparison runs `CILabDeltaE` with
+color management switched off, so it reads raw component values. Handed those two images as they
+arrive, it reports a large Delta E on every saturated pixel even though nothing on screen moved.
 
-Three signs of that shape:
+Saturated colors move furthest between color spaces; paper white and black text barely move at
+all. So the failing region is the screen's strongly-colored elements and only those. One reported
+screen's single olive button covers 2.1 % of the frame, and the failure reported 2.04 % of pixels
+differing with a lowest perceptual precision of 0.8128 — the same two numbers on every run.
 
-  * The failing region is the screen's **saturated** elements, and only those. Saturated colors
-    move furthest between color spaces; paper white and black text barely move at all. A screen
-    whose only strong color is one button will report a failing fraction equal to that button's
-    share of the frame.
-  * The lowest perceptual precision is **the same number on every run** of a given screen, and
-    often the same across unrelated screens with the same palette. A content change drifts; a
-    color-space shift is a constant of the two spaces.
-  * The `difference.png` attachment is nearly empty — a scatter of sub-code-point jitter — while
-    the reported failing count is in the tens of thousands. The byte comparison and the perceptual
-    comparison disagree about the size of the problem.
-
-The failure is intermittent in a characteristic way: a byte-identical render never reaches the
-perceptual comparison at all, so the test passes; any jitter at all reaches it, and then it is
-wrong every time. `compareCore` compares the images after normalizing both to the same sRGB 8-bit
-buffers, which is what makes the reported fraction mean what this article says it means.
+It was intermittent for a reason worth knowing: a byte-identical render never reaches the
+perceptual comparison at all, because the byte comparison returns first. Only when sub-code-point
+jitter on a magnifier glyph tripped that comparison did the run reach the perceptual path, and
+from there it was wrong every time. `compareCore` now normalizes both images to the same sRGB
+8-bit buffers before comparing them perceptually, which is what makes the reported fraction mean
+what this article says it means.
 
 ## Choosing the two together
 

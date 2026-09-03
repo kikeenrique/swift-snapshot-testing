@@ -372,9 +372,9 @@
     /// pixels.
     ///
     /// NB: This used to be derived from `CIAreaAverage`, whose single-value result is read back
-    ///     through a 1x1 half-float render. That quantizes the fraction to `Float16` and, on some
-    ///     Core Image back ends, averages over less than the full extent, which inflates the
-    ///     reported failing-pixel fraction. Counting the thresholded pixels keeps it exact.
+    ///     through a 1x1 half-float render, quantizing the fraction to `Float16`: 1000 failing
+    ///     pixels of 2,962,440 came back as 999.4. Counting the thresholded pixels keeps it
+    ///     exact, and keeps the denominator ours rather than Core Image's.
     func countingNonZeroPixels(in context: CIContext) -> Int? {
       guard let buffer = render(in: context) else { return nil }
       defer { buffer.free() }
