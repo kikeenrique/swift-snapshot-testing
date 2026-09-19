@@ -40,6 +40,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-xcresult
+          # Free-plan Actions storage is 500 MB and an xcresult bundle is ~100 MB, so the 90-day
+          # default fills the quota after five red runs. A week is long enough to read a failure.
+          retention-days: 7
           path: |
             TestResults.xcresult
             Tests/SnapshotTestingTests/__Snapshots__
@@ -66,6 +69,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: visionos-xcresult
+          # Free-plan Actions storage is 500 MB and an xcresult bundle is ~100 MB, so the 90-day
+          # default fills the quota after five red runs. A week is long enough to read a failure.
+          retention-days: 7
           path: |
             TestResults.xcresult
             Tests/SnapshotTestingTests/__Snapshots__
