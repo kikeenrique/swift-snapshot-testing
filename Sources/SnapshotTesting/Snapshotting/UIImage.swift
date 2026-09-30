@@ -396,8 +396,6 @@ private func normalizedComponentDiff(_ old: UIImage, _ new: UIImage) -> UIImage?
     }
 
     func applyingAreaAverage() -> CIImage {
-      // The extent is a `CIVector` parameter. Passing a `CGRect` only works where it happens to
-      // bridge to an `NSValue` the filter can read.
       applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
     }
 
