@@ -412,11 +412,11 @@
     }
 
     func applyingAreaAverage() -> CIImage {
-      applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: extent])
+      applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
     }
 
     func applyingAreaMaximum() -> CIImage {
-      applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: extent])
+      applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
     }
 
     func renderSingleValue(in context: CIContext) -> Float? {
