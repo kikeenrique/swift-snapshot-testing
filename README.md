@@ -218,6 +218,10 @@ targets: [
   - **Subclass-free.** Assert from any XCTest case or Quick spec.
   - **Device-agnostic snapshots.** Render views and view controllers for specific devices and trait
     collections from a single simulator.
+  - **Visual effects and system chrome.** Views that use Liquid Glass (iOS 26+), blurs, and other
+    render-server-composited effects can be captured too — they require a host application and the
+    `drawHierarchyInKeyWindow` option. See [Snapshotting visual effects and system
+    chrome][visual-effects] for the requirements and why.
   - **First-class Xcode support.** Image differences are captured as XCTest attachments. Text
     differences are rendered in inline error messages.
   - **Supports any platform that supports Swift.** Write snapshot tests for iOS, Linux, macOS, and
@@ -234,6 +238,7 @@ targets: [
 
 [available-strategies]: https://swiftpackageindex.com/pointfreeco/swift-snapshot-testing/main/documentation/snapshottesting/snapshotting
 [defining-strategies]: https://swiftpackageindex.com/pointfreeco/swift-snapshot-testing/main/documentation/snapshottesting/customstrategies
+[visual-effects]: https://swiftpackageindex.com/pointfreeco/swift-snapshot-testing/main/documentation/snapshottesting/visualeffects
 
 ## Plug-ins
 
