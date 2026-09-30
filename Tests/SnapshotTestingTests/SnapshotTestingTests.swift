@@ -36,11 +36,18 @@ import XCTest
 // unchanged page alternate between two results that differ by a single 1/255 step on 18 of the
 // image's 1.9M pixels. Comparing those snapshots perceptually absorbs the noise while still
 // failing on any difference a person could see.
+//
+// On visionOS 27 some of those 1/255 steps land on near-black pixels (0 vs 1, 3 vs 4), which the
+// perceptual comparison reports as a Delta E of about 3.5 because it reads the components without
+// color management. A pixel precision just under 1 lets that handful of pixels (about 19 of
+// 1.9M) exceed the perceptual bar; any visible change touches far more pixels and still fails.
 #if os(visionOS)
   private let webViewTimeout: TimeInterval = 30
+  private let webViewPrecision: Float = 0.99999
   private let webViewPerceptualPrecision: Float = 0.98
 #else
   private let webViewTimeout: TimeInterval = 5
+  private let webViewPrecision: Float = 1
   private let webViewPerceptualPrecision: Float = 1
 #endif
 
@@ -1327,7 +1334,7 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: webView,
           as: .image(
-            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
@@ -1392,7 +1399,7 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: stackView,
           as: .image(
-            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600),
+            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600),
             traits: traits),
           named: platform,
           timeout: webViewTimeout
@@ -1421,7 +1428,7 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: webView,
           as: .image(
-            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
@@ -1453,7 +1460,7 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: webView,
           as: .image(
-            perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
