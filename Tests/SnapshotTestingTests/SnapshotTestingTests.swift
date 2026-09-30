@@ -1806,7 +1806,8 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: webView,
           as: .image(
-            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision,
+            size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
@@ -1871,7 +1872,8 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: stackView,
           as: .image(
-            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600),
+            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision,
+            size: .init(width: 800, height: 600),
             traits: traits),
           named: platform,
           timeout: webViewTimeout
@@ -1900,7 +1902,8 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: webView,
           as: .image(
-            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision,
+            size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
@@ -1932,7 +1935,8 @@ final class SnapshotTestingTests: BaseTestCase {
         assertSnapshot(
           of: webView,
           as: .image(
-            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision, size: .init(width: 800, height: 600)),
+            precision: webViewPrecision, perceptualPrecision: webViewPerceptualPrecision,
+            size: .init(width: 800, height: 600)),
           named: platform,
           timeout: webViewTimeout
         )
