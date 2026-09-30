@@ -16,13 +16,14 @@ jobs:
     strategy:
       matrix:
         xcode:
-          - '26.6'
+          - '27.0'
 
     name: macOS
     # The runner OS must match the OS the references were recorded on: AppKit/SwiftUI/WebKit draw
-    # with the host OS (system colors, control internals, glyphs), so a macos-15 runner can never
-    # match macOS 26-recorded references, whatever the toolchain.
-    runs-on: macos-26
+    # with the host OS (system colors, control internals, glyphs), so a macos-26 runner can never
+    # match macOS 27-recorded references, whatever the toolchain. `xcode-27` is the macOS 27 image
+    # (preview at the time of writing).
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.xcode }}
@@ -51,10 +52,12 @@ jobs:
     strategy:
       matrix:
         xcode:
-          - '16.4'
+          - '27.0'
 
     name: visionOS
-    runs-on: macos-15
+    # The visionOS 27.0 simulator runtime ships only with the Xcode 27 image. `make test-visionos`
+    # creates the pinned device the references were recorded on.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.xcode }}
