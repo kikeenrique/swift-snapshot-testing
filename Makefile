@@ -33,11 +33,25 @@ test-tvos:
 		-scheme SnapshotTesting \
 		-destination platform="tvOS Simulator,name=Apple TV 4K,OS=13.3"
 
-test-visionos:
+# The visionOS references are recorded on this device and runtime; a different device type or
+# runtime renders differently and overwrites them. visionOS 27 only runs the 4K device type, which
+# runner images ship under the default name; create it locally when it is missing. The match is
+# exact so a renamed "Apple Vision Pro (…)" device does not count.
+VISIONOS_DEVICE = Apple Vision Pro
+VISIONOS_RUNTIME = 27.0
+
+visionos-simulator:
+	xcrun simctl list devices "visionOS $(VISIONOS_RUNTIME)" \
+		| grep -qE "^ +$(VISIONOS_DEVICE) \([0-9A-F-]{36}\)" || \
+	xcrun simctl create "$(VISIONOS_DEVICE)" \
+		com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K \
+		com.apple.CoreSimulator.SimRuntime.xrOS-$(subst .,-,$(VISIONOS_RUNTIME))
+
+test-visionos: visionos-simulator
 	set -o pipefail && \
 	xcodebuild test \
 		-scheme swift-snapshot-testing-Package \
-		-destination platform="visionOS Simulator,name=Apple Vision Pro (at 2732x2048),OS=2.5" \
+		-destination platform="visionOS Simulator,name=$(VISIONOS_DEVICE),OS=$(VISIONOS_RUNTIME)" \
 		$(RESULT_BUNDLE_FLAG)
 
 format:

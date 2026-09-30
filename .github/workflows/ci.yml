@@ -31,10 +31,12 @@ jobs:
     strategy:
       matrix:
         xcode:
-          - '16.4'
+          - '27.0'
 
     name: visionOS
-    runs-on: macos-15
+    # The visionOS 27.0 simulator runtime ships only with the Xcode 27 image. `make test-visionos`
+    # creates the pinned device the references were recorded on.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.xcode }}
