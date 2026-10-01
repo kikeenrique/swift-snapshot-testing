@@ -1,5 +1,6 @@
-@_spi(Internals) @testable import SnapshotTesting
 import XCTest
+
+@_spi(Internals) @testable import SnapshotTesting
 
 class WithSnapshotTestingTests: XCTestCase {
   func testNesting() {
