@@ -53,12 +53,12 @@
 
         switch layout {
         #if os(iOS) || os(tvOS) || os(visionOS)
-          case let .device(config: deviceConfig):
+          case .device(config: let deviceConfig):
             config = deviceConfig
         #endif
         case .sizeThatFits:
           config = .init(safeArea: .zero, size: nil, traits: traits)
-        case let .fixed(width: width, height: height):
+        case .fixed(width: let width, height: let height):
           let size = CGSize(width: width, height: height)
           config = .init(safeArea: .zero, size: size, traits: traits)
         }
@@ -142,7 +142,7 @@
         switch layout {
         case .sizeThatFits:
           size = nil
-        case let .fixed(width: width, height: height):
+        case .fixed(width: let width, height: let height):
           size = CGSize(width: width, height: height)
         }
 
