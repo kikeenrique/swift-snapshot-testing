@@ -25,18 +25,17 @@
     ///     match. 98-99% mimics
     ///     [the precision](http://zschuessler.github.io/DeltaE/learn/#toc-defining-delta-e) of the
     ///     human eye.
-    public static func image(precision: Float, perceptualPrecision: Float = 1) -> Snapshotting {
+    public static func image(
+      precision: Float, perceptualPrecision: Float = 1, scale: CGFloat? = nil
+    ) -> Snapshotting {
       return SimplySnapshotting.image(
         precision: precision, perceptualPrecision: perceptualPrecision
       ).pullback { layer in
-        let image = NSImage(size: layer.bounds.size)
-        image.lockFocus()
-        let context = NSGraphicsContext.current!.cgContext
-        layer.setNeedsLayout()
-        layer.layoutIfNeeded()
-        layer.render(in: context)
-        image.unlockFocus()
-        return image
+        NSImage.snapshot(size: layer.bounds.size, scale: scale) { context in
+          layer.setNeedsLayout()
+          layer.layoutIfNeeded()
+          layer.render(in: context)
+        }
       }
     }
   }
