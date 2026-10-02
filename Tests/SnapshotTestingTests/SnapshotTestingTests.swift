@@ -212,6 +212,10 @@ final class SnapshotTestingTests: BaseTestCase {
       button.bezelStyle = .rounded
       button.title = "Push Me"
       button.sizeToFit()
+      // `sizeToFit` aligns the frame to the main screen's backing pixels: 76.5 pt on a 2x
+      // display, 77 pt on a headless 1x runner. Round to whole points so the reference does not
+      // depend on the recording machine's display.
+      button.frame.size.width.round(.up)
       if !ProcessInfo.processInfo.environment.keys.contains("GITHUB_WORKFLOW") {
         // Text glyph antialiasing differs across macOS point releases, so allow a small
         // perceptual tolerance on top of the pinned scale.
