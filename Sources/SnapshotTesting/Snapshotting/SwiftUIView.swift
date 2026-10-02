@@ -74,7 +74,7 @@
             let hostingController = UIHostingController.init(rootView: view)
 
             if config.safeArea == .zero {
-              if #available(iOS 16.4, tvOS 16.4, visionOS 1.0, *) {
+              if #available(iOS 16.4, tvOS 16.4, *) {
                 hostingController.safeAreaRegions = []
               } else {
                 hostingController._disableSafeArea = true
