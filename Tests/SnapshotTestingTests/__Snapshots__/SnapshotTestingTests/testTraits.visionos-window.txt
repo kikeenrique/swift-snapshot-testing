@@ -1,0 +1,5 @@
+<UIView; frame = (0 0; 1280 720); autoresize = W+H; backgroundColor = UIExtendedGrayColorSpace 1 1; layer = <CALayer>>
+   | <UILabel; frame = (611 0; 58 20.5); text = 'What's'; userInteractionEnabled = NO; backgroundColor = UIExtendedGrayColorSpace 0 0; layer = <_UILabelLayer>>
+   | <UILabel; frame = (0 350; 25.5 20.5); text = 'the'; userInteractionEnabled = NO; backgroundColor = UIExtendedGrayColorSpace 0 0; layer = <_UILabelLayer>>
+   | <UILabel; frame = (1240 350; 40 20.5); text = 'point'; userInteractionEnabled = NO; backgroundColor = UIExtendedGrayColorSpace 0 0; layer = <_UILabelLayer>>
+   | <UILabel; frame = (636.5 702; 7.5 18); text = '?'; userInteractionEnabled = NO; backgroundColor = UIExtendedGrayColorSpace 0 0; layer = <_UILabelLayer>>

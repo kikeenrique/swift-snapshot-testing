@@ -405,7 +405,8 @@ public struct InlineSnapshotSyntaxDescriptor: Hashable {
           snapshots: snapshots.sorted {
             $0.line != $1.line
               ? $0.line < $1.line
-              : $0.syntaxDescriptor.trailingClosureOffset < $1.syntaxDescriptor.trailingClosureOffset
+              : $0.syntaxDescriptor.trailingClosureOffset
+                < $1.syntaxDescriptor.trailingClosureOffset
           },
           sourceLocationConverter: testSource.sourceLocationConverter
         )
@@ -760,8 +761,6 @@ public struct InlineSnapshotSyntaxDescriptor: Hashable {
     }
   }
 #endif
-
-import Foundation
 
 @_spi(Internals)
 public final class LockIsolated<Value>: @unchecked Sendable {

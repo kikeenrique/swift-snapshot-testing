@@ -4,7 +4,7 @@
 
   /// The size constraint for a snapshot (similar to `PreviewLayout`).
   public enum SwiftUISnapshotLayout {
-    #if os(iOS) || os(tvOS)
+    #if os(iOS) || os(tvOS) || os(visionOS)
       /// Center the view in a device container described by`config`.
       case device(config: ViewImageConfig)
     #endif
@@ -14,8 +14,8 @@
     case sizeThatFits
   }
 
-  #if os(iOS) || os(tvOS)
-    @available(iOS 13.0, tvOS 13.0, *)
+  #if os(iOS) || os(tvOS) || os(visionOS)
+    @available(iOS 13.0, tvOS 13.0, visionOS 1.0, *)
     extension Snapshotting where Value: SwiftUI.View, Format == UIImage {
 
       /// A snapshot strategy for comparing SwiftUI Views based on pixel equality.
@@ -48,13 +48,13 @@
         let config: ViewImageConfig
 
         switch layout {
-        #if os(iOS) || os(tvOS)
-          case let .device(config: deviceConfig):
+        #if os(iOS) || os(tvOS) || os(visionOS)
+          case .device(config: let deviceConfig):
             config = deviceConfig
         #endif
         case .sizeThatFits:
           config = .init(safeArea: .zero, size: nil, traits: traits)
-        case let .fixed(width: width, height: height):
+        case .fixed(let width, let height):
           let size = CGSize(width: width, height: height)
           config = .init(safeArea: .zero, size: size, traits: traits)
         }
