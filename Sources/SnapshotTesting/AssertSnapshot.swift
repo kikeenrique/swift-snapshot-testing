@@ -593,24 +593,14 @@ func sanitizePathComponent(_ string: String) -> String {
 }
 
 #if !os(Android) && !os(Linux) && !os(Windows)
-  import CoreServices
   import UniformTypeIdentifiers
 
   func uniformTypeIdentifier(fromExtension pathExtension: String) -> String? {
-    #if os(visionOS)
-      return UTType(filenameExtension: pathExtension)?.identifier
-    #else
-      if #available(iOS 14, macOS 11, tvOS 14, watchOS 7, *) {
-        return UTType(filenameExtension: pathExtension)?.identifier
-      }
-      let unmanagedString = UTTypeCreatePreferredIdentifierForTag(
-        kUTTagClassFilenameExtension as CFString,
-        pathExtension as CFString,
-        nil
-      )
-
-      return unmanagedString?.takeRetainedValue() as String?
-    #endif
+    // Before UTType the attachment goes out without a type identifier, as it does for a strategy
+    // with no path extension. The CoreServices lookup it replaces is deprecated, and any reference
+    // to it warns: recent Xcodes raise the effective deployment target past the deprecation.
+    guard #available(iOS 14, macOS 11, tvOS 14, watchOS 7, *) else { return nil }
+    return UTType(filenameExtension: pathExtension)?.identifier
   }
 #endif
 
