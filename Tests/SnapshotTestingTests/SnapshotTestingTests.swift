@@ -962,10 +962,26 @@ final class SnapshotTestingTests: BaseTestCase {
               self.bottomLabel.centerXAnchor.constraint(
                 equalTo: self.view.safeAreaLayoutGuide.centerXAnchor),
             ])
+
+            #if os(visionOS)
+              // 'traitCollectionDidChange' is deprecated on visionOS. Its override also ran for
+              // the initial traits, so apply the fonts once here too.
+              self.updateFonts()
+              self.registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) {
+                (viewController: MyViewController, _: UITraitCollection) in
+                viewController.updateFonts()
+              }
+            #endif
           }
 
-          override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-            super.traitCollectionDidChange(previousTraitCollection)
+          #if !os(visionOS)
+            override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+              super.traitCollectionDidChange(previousTraitCollection)
+              self.updateFonts()
+            }
+          #endif
+
+          func updateFonts() {
             self.topLabel.font = .preferredFont(
               forTextStyle: .headline, compatibleWith: self.traitCollection)
             self.leadingLabel.font = .preferredFont(
@@ -1213,9 +1229,9 @@ final class SnapshotTestingTests: BaseTestCase {
               of: viewController,
               as: .image(
                 on: .visionOSWindow,
-                traits: .init(traitsFrom: [
-                  visionOSLightTraits, .init(preferredContentSizeCategory: contentSize),
-                ])),
+                traits: visionOSLightTraits.modifyingTraits {
+                  $0.preferredContentSizeCategory = contentSize
+                }),
               named: "visionos-window-\(name)"
             )
           }
@@ -1278,10 +1294,26 @@ final class SnapshotTestingTests: BaseTestCase {
               self.bottomLabel.centerXAnchor.constraint(
                 equalTo: self.view.safeAreaLayoutGuide.centerXAnchor),
             ])
+
+            #if os(visionOS)
+              // 'traitCollectionDidChange' is deprecated on visionOS. Its override also ran for
+              // the initial traits, so apply the fonts once here too.
+              self.updateFonts()
+              self.registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) {
+                (viewController: MyViewController, _: UITraitCollection) in
+                viewController.updateFonts()
+              }
+            #endif
           }
 
-          override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-            super.traitCollectionDidChange(previousTraitCollection)
+          #if !os(visionOS)
+            override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+              super.traitCollectionDidChange(previousTraitCollection)
+              self.updateFonts()
+            }
+          #endif
+
+          func updateFonts() {
             self.topLabel.font = .preferredFont(
               forTextStyle: .headline, compatibleWith: self.traitCollection)
             self.leadingLabel.font = .preferredFont(
@@ -1431,6 +1463,16 @@ final class SnapshotTestingTests: BaseTestCase {
           ])
 
           collectionView.reloadData()
+
+          #if os(visionOS)
+            // 'traitCollectionDidChange' is deprecated on visionOS.
+            registerForTraitChanges([
+              UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self,
+            ]) {
+              (viewController: CollectionViewController, _: UITraitCollection) in
+              viewController.collectionView.collectionViewLayout.invalidateLayout()
+            }
+          #endif
         }
 
         override func viewDidLayoutSubviews() {
@@ -1438,10 +1480,12 @@ final class SnapshotTestingTests: BaseTestCase {
           collectionView.collectionViewLayout.invalidateLayout()
         }
 
-        override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-          super.traitCollectionDidChange(previousTraitCollection)
-          collectionView.collectionViewLayout.invalidateLayout()
-        }
+        #if !os(visionOS)
+          override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+            super.traitCollectionDidChange(previousTraitCollection)
+            collectionView.collectionViewLayout.invalidateLayout()
+          }
+        #endif
 
         func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath)
           -> UICollectionViewCell
@@ -1510,10 +1554,9 @@ final class SnapshotTestingTests: BaseTestCase {
         allContentSizes.forEach { name, contentSize in
           #if os(visionOS)
             let fixtureName = "label-\(name)-visionos"
-            let traits = UITraitCollection(traitsFrom: [
-              .init(preferredContentSizeCategory: contentSize),
-              visionOSLightTraits,
-            ])
+            let traits = visionOSLightTraits.modifyingTraits {
+              $0.preferredContentSizeCategory = contentSize
+            }
           #else
             let fixtureName = "label-\(name)"
             let traits = UITraitCollection(preferredContentSizeCategory: contentSize)

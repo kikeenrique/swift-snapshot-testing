@@ -1231,15 +1231,13 @@
       var window: UIWindow?
       #if os(visionOS)
         // 'UIApplication.windows' is deprecated on visionOS and documented to be empty
-        // for scene-based apps, so resolve the key window through the connected scenes
-        // and only fall back to the flat list.
+        // for scene-based apps, so resolve the key window through the connected scenes.
         let windowScenes =
           UIApplication.sharedIfAvailable?.connectedScenes.compactMap { $0 as? UIWindowScene }
           ?? []
         window =
           windowScenes.compactMap(\.keyWindow).first
           ?? windowScenes.flatMap(\.windows).first { $0.isKeyWindow }
-          ?? UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
       #else
         if #available(iOS 13.0, *) {
           window = UIApplication.sharedIfAvailable?.windows.first { $0.isKeyWindow }
