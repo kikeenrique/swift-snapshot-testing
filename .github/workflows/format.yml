@@ -3,27 +3,30 @@ name: Format
 on:
   push:
     branches:
-      - main
+      - "**"
 
 concurrency:
   group: format-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   swift_format:
     name: swift-format
-    runs-on: macos-13
+    # Same image and Xcode as the CI jobs and the development machine, so `make format` gives the
+    # same result here as locally. Xcode's toolchain ships swift-format; a Homebrew copy would be
+    # a different version and could reformat what the toolchain one accepts.
+    runs-on: xcode-27
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Xcode Select
-        run: sudo xcode-select -s /Applications/Xcode_14.3.1.app
-      - name: Install
-        run: brew install swift-format
+        run: sudo xcode-select -s /Applications/Xcode_27.0.app
       - name: Format
         run: make format
-      - uses: stefanzweifel/git-auto-commit-action@v4
+      - uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: Run swift-format
-          branch: 'main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

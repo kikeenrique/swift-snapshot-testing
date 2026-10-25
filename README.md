@@ -154,6 +154,36 @@ assertSnapshot(of: user, as: .dump)
 
 If your data can be represented as an image, text, or data, you can write a snapshot test for it!
 
+## visionOS
+
+visionOS snapshots use the `visionOSWindow` config, which describes the system's initial window
+size (1280x720 pt at 2x). Windows are freely resizable by the wearer, so you can ask for any other
+geometry.
+
+``` swift
+assertSnapshot(of: vc, as: .image(on: .visionOSWindow))
+assertSnapshot(of: vc, as: .image(on: .visionOSWindow(width: 1920, height: 1080)))
+```
+
+Two visionOS behaviors surprise people the first time they record a reference.
+
+**Dynamic colors resolve dark by default.** visionOS has no Dark Mode setting, and unpinned dynamic
+colors resolve dark (`.label` white, `.systemBackground` clear), so a reference recorded without an
+appearance looks surprisingly dark or blank. Pass the appearance you mean at the call site:
+
+``` swift
+assertSnapshot(
+  of: vc,
+  as: .image(on: .visionOSWindow, traits: .init(userInterfaceStyle: .light))
+)
+```
+
+**System-composited content cannot be captured.** Glass and vibrancy backgrounds, ornaments, and
+RealityKit content are composited by the system outside the app's process, so a snapshot of that
+content comes back empty by design. For the full explanation — with references to Apple's
+documentation for each claim, and what to do instead — see
+[Snapshot testing on visionOS](Sources/SnapshotTesting/Documentation.docc/Articles/VisionOS.md).
+
 ## Documentation
 
 The latest documentation is available
@@ -220,8 +250,8 @@ targets: [
     collections from a single simulator.
   - **First-class Xcode support.** Image differences are captured as XCTest attachments. Text
     differences are rendered in inline error messages.
-  - **Supports any platform that supports Swift.** Write snapshot tests for iOS, Linux, macOS, and
-    tvOS.
+  - **Supports any platform that supports Swift.** Write snapshot tests for iOS, Linux, macOS,
+    tvOS, and visionOS.
   - **SceneKit, SpriteKit, and WebKit support.** Most snapshot testing libraries don't support these
     view subclasses.
   - **`Codable` support**. Snapshot encodable data structures into their JSON and property list
