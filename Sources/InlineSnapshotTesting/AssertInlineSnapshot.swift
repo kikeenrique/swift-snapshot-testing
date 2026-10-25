@@ -148,10 +148,12 @@ import Foundation
 
         guard let expected
         else {
+          var failure = "No expected value to assert against."
+          if let actual {
+            failure += " Actual: …\n\n\(actual.indenting(by: 2))"
+          }
           recordIssue(
-            """
-            No expected value to assert against.
-            """,
+            failure,
             fileID: fileID,
             filePath: filePath,
             line: line,
@@ -485,26 +487,35 @@ public struct InlineSnapshotSyntaxDescriptor: Hashable {
           ClosureExprSyntax(
             leftBrace: .leftBraceToken(trailingTrivia: .newline),
             statements: CodeBlockItemListSyntax {
-              StringLiteralExprSyntax(
-                leadingTrivia: Trivia(stringLiteral: leadingIndent),
-                openingPounds: .rawStringPoundDelimiter(delimiter),
-                openingQuote: .multilineStringQuoteToken(trailingTrivia: .newline),
-                segments: [
-                  .stringSegment(
-                    StringSegmentSyntax(
-                      content: .stringSegment(
-                        actual
-                          .replacingOccurrences(of: "\r", with: #"\\#(delimiter)r"#)
-                          .indenting(with: leadingIndent)
+              if actual.isEmpty {
+                StringLiteralExprSyntax(
+                  leadingTrivia: Trivia(stringLiteral: leadingIndent),
+                  openingQuote: .stringQuoteToken(),
+                  segments: [],
+                  closingQuote: .stringQuoteToken()
+                )
+              } else {
+                StringLiteralExprSyntax(
+                  leadingTrivia: Trivia(stringLiteral: leadingIndent),
+                  openingPounds: .rawStringPoundDelimiter(delimiter),
+                  openingQuote: .multilineStringQuoteToken(trailingTrivia: .newline),
+                  segments: [
+                    .stringSegment(
+                      StringSegmentSyntax(
+                        content: .stringSegment(
+                          actual
+                            .replacingOccurrences(of: "\r", with: #"\\#(delimiter)r"#)
+                            .indenting(with: leadingIndent)
+                        )
                       )
                     )
-                  )
-                ],
-                closingQuote: .multilineStringQuoteToken(
-                  leadingTrivia: .newline + Trivia(stringLiteral: leadingIndent)
-                ),
-                closingPounds: .rawStringPoundDelimiter(delimiter)
-              )
+                  ],
+                  closingQuote: .multilineStringQuoteToken(
+                    leadingTrivia: .newline + Trivia(stringLiteral: leadingIndent)
+                  ),
+                  closingPounds: .rawStringPoundDelimiter(delimiter)
+                )
+              }
             },
             rightBrace: .rightBraceToken(
               leadingTrivia: .newline + Trivia(stringLiteral: leadingTrivia)
