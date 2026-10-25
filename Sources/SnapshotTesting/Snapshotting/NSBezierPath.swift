@@ -24,7 +24,9 @@
     ///     match. 98-99% mimics
     ///     [the precision](http://zschuessler.github.io/DeltaE/learn/#toc-defining-delta-e) of the
     ///     human eye.
-    public static func image(precision: Float = 1, perceptualPrecision: Float = 1) -> Snapshotting {
+    public static func image(
+      precision: Float = 1, perceptualPrecision: Float = 1, scale: CGFloat? = nil
+    ) -> Snapshotting {
       return SimplySnapshotting.image(
         precision: precision, perceptualPrecision: perceptualPrecision
       ).pullback { path in
@@ -33,11 +35,9 @@
         let transform = AffineTransform(translationByX: -bounds.origin.x, byY: -bounds.origin.y)
         path.transform(using: transform)
 
-        let image = NSImage(size: path.bounds.size)
-        image.lockFocus()
-        path.fill()
-        image.unlockFocus()
-        return image
+        return NSImage.snapshot(size: path.bounds.size, scale: scale) { _ in
+          path.fill()
+        }
       }
     }
   }

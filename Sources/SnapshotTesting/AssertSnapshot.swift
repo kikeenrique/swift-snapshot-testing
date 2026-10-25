@@ -342,11 +342,19 @@ public func verifySnapshot<Value, Format>(
 
       let tookSnapshot = XCTestExpectation(description: "Took snapshot")
       var optionalDiffable: Format?
+      // NB: Drop anything a previous assertion's strategy diagnosed too late to be reported, so
+      //     only a diagnosis made for this snapshot can be returned below.
+      _ = SnapshotDiagnostic.take()
       snapshotting.snapshot(try value()).run { b in
         optionalDiffable = b
         tookSnapshot.fulfill()
       }
       let result = XCTWaiter.wait(for: [tookSnapshot], timeout: timeout)
+      // NB: A strategy that diagnosed its own failure knows more than the wait's outcome does,
+      //     so its message wins over both the generic timeout and any comparison below.
+      if let diagnostic = SnapshotDiagnostic.take() {
+        return diagnostic
+      }
       switch result {
       case .completed:
         break
@@ -574,17 +582,14 @@ func sanitizePathComponent(_ string: String) -> String {
 }
 
 #if !os(Android) && !os(Linux) && !os(Windows)
-  import CoreServices
+  import UniformTypeIdentifiers
 
   func uniformTypeIdentifier(fromExtension pathExtension: String) -> String? {
-    // This can be much cleaner in macOS 11+ using UTType
-    let unmanagedString = UTTypeCreatePreferredIdentifierForTag(
-      kUTTagClassFilenameExtension as CFString,
-      pathExtension as CFString,
-      nil
-    )
-
-    return unmanagedString?.takeRetainedValue() as String?
+    // Before UTType the attachment goes out without a type identifier, as it does for a strategy
+    // with no path extension. The CoreServices lookup it replaces is deprecated, and any reference
+    // to it warns: recent Xcodes raise the effective deployment target past the deprecation.
+    guard #available(iOS 14, macOS 11, tvOS 14, watchOS 7, *) else { return nil }
+    return UTType(filenameExtension: pathExtension)?.identifier
   }
 #endif
 
@@ -606,6 +611,34 @@ private class CleanCounterBetweenTestCases: NSObject, XCTestObservation {
 
   func testCaseDidFinish(_ testCase: XCTestCase) {
     _counter.reset()
+  }
+}
+
+/// A failure a snapshot strategy diagnosed while producing its value.
+///
+/// `Async` carries a value and nothing else, so a strategy that discovers it cannot produce a
+/// usable snapshot can only hand back something wrong or never call its callback — and never
+/// calling back surfaces as `verifySnapshot`'s generic timeout, far from the cause. Recording the
+/// diagnosis here lets `verifySnapshot` return it verbatim instead.
+enum SnapshotDiagnostic {
+  private static let lock = NSLock()
+  nonisolated(unsafe) private static var message: String?
+
+  /// Records a diagnosis for the snapshot currently being taken.
+  static func record(_ message: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    // NB: The first diagnosis is the one closest to the cause; later ones are its consequences.
+    guard Self.message == nil else { return }
+    Self.message = message
+  }
+
+  /// Returns the recorded diagnosis, if any, and clears it.
+  static func take() -> String? {
+    lock.lock()
+    defer { lock.unlock() }
+    defer { message = nil }
+    return message
   }
 }
 

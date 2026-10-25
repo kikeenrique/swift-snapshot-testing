@@ -65,16 +65,25 @@
           }
         )
         func testNSImage() {
-          let redPixel = NSImage(size: NSSize(width: 1, height: 1), flipped: false) { rect in
-            NSColor.red.setFill()
-            rect.fill()
-            return true
+          // An explicit 1×1 bitmap rep, not NSImage(size:flipped:): a drawing-handler image
+          // rasterizes at the host display's backing scale, so a Retina machine records a 2×2 px
+          // reference that a 1x machine can never reproduce.
+          func pixel(_ color: NSColor) -> NSImage {
+            let rep = NSBitmapImageRep(
+              bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1, bitsPerSample: 8,
+              samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+              bytesPerRow: 4, bitsPerPixel: 32)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            color.setFill()
+            NSRect(x: 0, y: 0, width: 1, height: 1).fill()
+            NSGraphicsContext.restoreGraphicsState()
+            let image = NSImage(size: NSSize(width: 1, height: 1))
+            image.addRepresentation(rep)
+            return image
           }
-          let bluePixel = NSImage(size: NSSize(width: 1, height: 1), flipped: false) { rect in
-            NSColor.blue.setFill()
-            rect.fill()
-            return true
-          }
+          let redPixel = pixel(.red)
+          let bluePixel = pixel(.blue)
           assertSnapshot(of: redPixel, as: .image, named: "pixel")
           withKnownIssue {
             assertSnapshot(of: bluePixel, as: .image, named: "pixel")

@@ -29,6 +29,7 @@
     public static func image(
       precision: Float = 1,
       perceptualPrecision: Float = 1,
+      scale: CGFloat? = nil,
       drawingMode: CGPathDrawingMode = .eoFill
     ) -> Snapshotting {
       return SimplySnapshotting.image(
@@ -38,14 +39,10 @@
         var transform = CGAffineTransform(translationX: -bounds.origin.x, y: -bounds.origin.y)
         let path = path.copy(using: &transform)!
 
-        let image = NSImage(size: bounds.size)
-        image.lockFocus()
-        let context = NSGraphicsContext.current!.cgContext
-
-        context.addPath(path)
-        context.drawPath(using: drawingMode)
-        image.unlockFocus()
-        return image
+        return NSImage.snapshot(size: bounds.size, scale: scale) { context in
+          context.addPath(path)
+          context.drawPath(using: drawingMode)
+        }
       }
     }
   }

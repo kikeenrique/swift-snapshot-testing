@@ -25,9 +25,11 @@
             old, new, precision: precision, perceptualPrecision: perceptualPrecision)
         else { return nil }
         let difference = SnapshotTesting.diff(old, new)
-        let oldAttachment = DiffAttachment.data(NSImagePNGRepresentation(old)!, name: "reference.png")
+        let oldAttachment = DiffAttachment.data(
+          NSImagePNGRepresentation(old)!, name: "reference.png")
         let newAttachment = DiffAttachment.data(NSImagePNGRepresentation(new)!, name: "failure.png")
-        let differenceAttachment = DiffAttachment.data(NSImagePNGRepresentation(difference)!, name: "difference.png")
+        let differenceAttachment = DiffAttachment.data(
+          NSImagePNGRepresentation(difference)!, name: "difference.png")
         return (
           message,
           [oldAttachment, newAttachment, differenceAttachment]
@@ -76,83 +78,42 @@
     guard let newCgImage = new.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
       return "Newly-taken snapshot could not be loaded."
     }
-    guard newCgImage.width != 0, newCgImage.height != 0 else {
-      return "Newly-taken snapshot is empty."
+    return compareCore(
+      oldCgImage,
+      newCgImage,
+      oldSize: old.size,
+      newSize: new.size,
+      precision: precision,
+      perceptualPrecision: perceptualPrecision
+    ) {
+      guard let pngData = NSImagePNGRepresentation(new) else { return nil }
+      return NSImage(data: pngData)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
     }
-    guard oldCgImage.width == newCgImage.width, oldCgImage.height == newCgImage.height else {
-      return "Newly-taken snapshot@\(new.size) does not match reference@\(old.size)."
-    }
-    guard let oldContext = context(for: oldCgImage), let oldData = oldContext.data else {
-      return "Reference image's data could not be loaded."
-    }
-    guard let newContext = context(for: newCgImage), let newData = newContext.data else {
-      return "Newly-taken snapshot's data could not be loaded."
-    }
-    let byteCount = oldContext.height * oldContext.bytesPerRow
-    if memcmp(oldData, newData, byteCount) == 0 { return nil }
-    guard
-      let pngData = NSImagePNGRepresentation(new),
-      let newerCgImage = NSImage(data: pngData)?.cgImage(
-        forProposedRect: nil, context: nil, hints: nil),
-      let newerContext = context(for: newerCgImage),
-      let newerData = newerContext.data
-    else {
-      return "Newly-taken snapshot's data could not be loaded."
-    }
-    if memcmp(oldData, newerData, byteCount) == 0 { return nil }
-    if precision >= 1, perceptualPrecision >= 1 {
-      return "Newly-taken snapshot does not match reference."
-    }
-    if perceptualPrecision < 1, #available(macOS 10.13, *) {
-      return perceptuallyCompare(
-        CIImage(cgImage: oldCgImage),
-        CIImage(cgImage: newCgImage),
-        pixelPrecision: precision,
-        perceptualPrecision: perceptualPrecision
-      )
-    } else {
-      let oldRep = NSBitmapImageRep(cgImage: oldCgImage).bitmapData!
-      let newRep = NSBitmapImageRep(cgImage: newerCgImage).bitmapData!
-      let byteCountThreshold = Int((1 - precision) * Float(byteCount))
-      var differentByteCount = 0
-      // NB: We are purposely using a verbose 'while' loop instead of a 'for in' loop.  When the
-      //     compiler doesn't have optimizations enabled, like in test targets, a `while` loop is
-      //     significantly faster than a `for` loop for iterating through the elements of a memory
-      //     buffer. Details can be found in [SR-6983](https://github.com/apple/swift/issues/49531)
-      var index = 0
-      while index < byteCount {
-        defer { index += 1 }
-        if oldRep[index] != newRep[index] {
-          differentByteCount += 1
-        }
-      }
-      if differentByteCount > byteCountThreshold {
-        let actualPrecision = 1 - Float(differentByteCount) / Float(byteCount)
-        return "Actual image precision \(actualPrecision) is less than required \(precision)"
-      }
-    }
-    return nil
-  }
-
-  private func context(for cgImage: CGImage) -> CGContext? {
-    guard
-      let space = cgImage.colorSpace,
-      let context = CGContext(
-        data: nil,
-        width: cgImage.width,
-        height: cgImage.height,
-        bitsPerComponent: cgImage.bitsPerComponent,
-        bytesPerRow: cgImage.bytesPerRow,
-        space: space,
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-      )
-    else { return nil }
-
-    context.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
-    return context
   }
 
   private func diff(_ old: NSImage, _ new: NSImage) -> NSImage {
+    normalizedComponentDiff(old, new)
+      ?? blendModeDiff(old, new)
+  }
+
+  private func normalizedComponentDiff(_ old: NSImage, _ new: NSImage) -> NSImage? {
+    guard let oldCgImage = old.cgImage(forProposedRect: nil, context: nil, hints: nil),
+      let pngData = NSImagePNGRepresentation(new),
+      let newCgImage = NSImage(data: pngData)?.cgImage(
+        forProposedRect: nil, context: nil, hints: nil),
+      let outputCgImage = SnapshotTesting.normalizedComponentDiff(oldCgImage, newCgImage)
+    else {
+      return nil
+    }
+
+    let rep = NSBitmapImageRep(cgImage: outputCgImage)
+    rep.size = old.size
+    let difference = NSImage(size: old.size)
+    difference.addRepresentation(rep)
+    return difference
+  }
+
+  private func blendModeDiff(_ old: NSImage, _ new: NSImage) -> NSImage {
     let oldCiImage = CIImage(cgImage: old.cgImage(forProposedRect: nil, context: nil, hints: nil)!)
     let newCiImage = CIImage(cgImage: new.cgImage(forProposedRect: nil, context: nil, hints: nil)!)
     let differenceFilter = CIFilter(name: "CIDifferenceBlendMode")!
